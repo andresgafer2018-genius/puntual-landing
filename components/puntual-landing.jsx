@@ -1,3 +1,5 @@
+
+ 
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -283,8 +285,7 @@ export default function PuntualLanding() {
         display: "flex", alignItems: "center", gap: 16,
       }}>
         <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 22, color: "#4f8ef7", letterSpacing: "-0.5px", flexShrink: 0 }}>
-          Puntual<span style={{ color: "#f7854f" }}>.</span>
-        </span>
+        <img src="/logopuntual.png" alt="Puntual" style={{ height: 44, width: "auto", display: "block", flexShrink: 0 }} />
 
         <div style={{ display: "flex", gap: 28, marginLeft: 32, flex: 1 }} className="desktop-nav">
           {NAV_LINKS.map((l) => (
