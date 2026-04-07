@@ -5294,9 +5294,7 @@ async function _descargarFormDisponibilidad_ZIP() {
 
 // Envía el formulario HTML adjunto a cada profesor vía GAS
 async function _enviarFormDisponibilidadSeleccionados() {
-  const cfg = state.config?.emailConf || {};
-  if (!cfg.gasUrl)
-    return alert('⚠️ Configurá Google Apps Script primero en Horarios → 📧 Enviar Emails.');
+ const cfg = state.config?.emailConf || {};
   const seleccionados = Array.from(document.querySelectorAll('.fd-check:checked'))
     .map(cb => state.profesores.find(p => p.id === cb.dataset.profId))
     .filter(Boolean).filter(p => p.email);
@@ -5330,7 +5328,19 @@ async function _enviarFormDisponibilidadSeleccionados() {
         htmldata: htmlB64,
         htmlname: `${nombre} - Disponibilidad ${anio}.html`,
       };
-      await fetch(cfg.gasUrl, { method: 'POST', body: new URLSearchParams(params), mode: 'no-cors' });
+      const res = await fetch('https://puntual-landing.vercel.app/api/email/disponibilidad', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    profesorNombre: prof.nombre,
+    profesorEmail: prof.email,
+    escuelaNombre: escuela,
+    anio: anio,
+    adjuntoBase64: htmlB64,
+    adjuntoNombre: nombre
+  })
+});
+if (!res.ok) throw new Error(await res.text());
       // Con mode:'no-cors' la respuesta es opaca (no se puede leer) pero el POST llega al servidor
       resultados.ok++;
     } catch(err) {
