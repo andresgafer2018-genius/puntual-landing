@@ -5546,6 +5546,7 @@ function _renderModalEmail() {
     .sort((a, b) => a.apellido.localeCompare(b.apellido) || a.nombre.localeCompare(b.nombre));
 
   const sinEmail = profs.filter(p => !p.email).length;
+  const profsSorted = profs;
 
   // ── Script GAS para copiar ───────────────────────────────────────────────
   const GAS_CODE = [
