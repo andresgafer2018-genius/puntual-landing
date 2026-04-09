@@ -6129,8 +6129,10 @@ async function enviarEmailsSeleccionados() {
     escuelaNombre: state.config?.nombreEscuela || 'La escuela',
     adjuntoBase64: base64,
     adjuntoNombre: archivoNombre,
+    icsBase64: icsBase64 || null,
+    icsNombre: icsNombre || null,
     htmlCuerpo: htmlbody
-  })
+})
 });
 if (!res.ok) throw new Error(await res.text());
       // Con mode:'no-cors' la respuesta es opaca pero el POST llega al servidor GAS
