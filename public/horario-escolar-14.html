@@ -5641,70 +5641,6 @@ function _renderModalEmail() {
     '}'
   ].join('\n');
 
-  // ── Sección configuración Google Apps Script ─────────────────────────────
-  const cfgHTML = `
-  <details id="emailConfigDetails" ${configurado ? '' : 'open'}
-    style="border:1px solid #E5E7EB;border-radius:8px;margin-bottom:16px;overflow:hidden;">
-    <summary style="background:${configurado?'#F0FDF4':'#EFF6FF'};padding:12px 16px;cursor:pointer;
-      font-weight:600;font-size:14px;color:${configurado?'#166534':'#1E40AF'};list-style:none;display:flex;align-items:center;gap:8px;">
-      <span>${configurado ? '✅' : '⚙️'}</span>
-      <span>Configuración Google Apps Script ${configurado ? '— activa' : '(requerida)'}</span>
-      <span style="font-size:12px;font-weight:400;margin-left:4px;color:var(--text3);">
-        ${configurado ? 'Clic para ver / editar' : '· Hacé esto una sola vez, lleva ~10 minutos'}
-      </span>
-    </summary>
-    <div style="padding:16px;background:#FAFAFA;">
-
-      <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:10px 14px;margin-bottom:10px;font-size:13px;line-height:1.7;">
-        <strong>⚠️ Si ya tenías el script configurado:</strong> el código fue actualizado para corregir un error de envío. Tenés que <strong>volver a script.google.com</strong>, reemplazar el código por el nuevo (copialo abajo) y hacer <em>Implementar → <strong>Nueva implementación</strong></em> (no "Editar" la existente). Después pegá la nueva URL aquí abajo.
-      </div>
-      <div style="background:#DBEAFE;border:1px solid #BFDBFE;border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.85;">
-        <strong>📌 Configuración paso a paso:</strong><br>
-        <strong>1.</strong> Entrá a
-          <a href="https://script.google.com" target="_blank" style="color:#1D4ED8;font-weight:600;">script.google.com</a>
-          con tu cuenta de Gmail institucional y creá un <strong>Nuevo proyecto</strong> (o abrí el existente).<br>
-        <strong>2.</strong> Borrá el código que aparece y pegá el código de abajo
-          <button onclick="(function(){navigator.clipboard.writeText(document.getElementById('gasCodePre').textContent);
-            var b=event.target;b.textContent='✅ Copiado!';setTimeout(()=>b.textContent='📋 Copiar código',1800);})()"
-            style="margin-left:6px;padding:2px 10px;font-size:12px;border:1px solid #BFDBFE;border-radius:4px;background:#EFF6FF;color:#1D4ED8;cursor:pointer;">
-            📋 Copiar código
-          </button><br>
-        <strong>3.</strong> Clic en <em>Implementar → <strong>Nueva implementación</strong></em> (siempre nueva, nunca editar):<br>
-          &emsp;· Tipo: <strong>Aplicación web</strong><br>
-          &emsp;· Ejecutar como: <strong>Yo</strong><br>
-          &emsp;· Acceso: <strong>Cualquier persona</strong><br>
-        <strong>4.</strong> Autorizá los permisos de Gmail cuando te lo pida.<br>
-        <strong>5.</strong> Copiá la <strong>URL de la Web App</strong> que aparece y pegala aquí abajo.
-      </div>
-
-      <pre id="gasCodePre" style="background:#1e1e2e;color:#cdd6f4;font-size:11.5px;line-height:1.6;
-        padding:12px 14px;border-radius:6px;overflow-x:auto;margin-bottom:14px;white-space:pre;">${_escHtml(GAS_CODE)}</pre>
-
-      <div class="form-group" style="margin-bottom:10px;">
-        <label class="form-label">URL de la Web App *</label>
-        <input class="form-control" id="gasUrl" type="url"
-          placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-          value="${_escHtml(cfg.gasUrl||'')}" />
-        <div class="form-hint">La URL termina siempre en <code>/exec</code></div>
-      </div>
-      <div class="form-group" style="margin-bottom:8px;">
-        <label class="form-label">Asunto del email</label>
-        <input class="form-control" id="ejsAsunto" type="text"
-          value="${_escHtml(cfg.asunto||'Tu horario semanal – {escuela}')}" />
-        <div class="form-hint">Variables disponibles: {nombre} {apellido} {escuela}</div>
-      </div>
-      <div class="form-group" style="margin-bottom:14px;">
-        <label class="form-label">Cuerpo del email</label>
-        <textarea class="form-control" id="ejsCuerpo" rows="6">${_escHtml(cfg.cuerpo||'Estimado/a {nombre},\n\nTe enviamos adjunto tu horario para la próxima semana.\n\n{links_calendario}\n\nSaludos,\n{escuela}')}</textarea>
-        <div class="form-hint">Variables disponibles: {nombre} {apellido} {escuela} {links_calendario}</div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-primary" style="font-size:13px;" onclick="guardarEmailConf()">💾 Guardar configuración</button>
-        <button class="btn btn-secondary" style="font-size:13px;" onclick="probarConexionGAS()">🔗 Probar conexión</button>
-      </div>
-    </div>
-  </details>`;
-
   // ── Lista de profesores ──────────────────────────────────────────────────
   const gasNote = '';
 
@@ -5765,7 +5701,7 @@ const profTableHTML = `
     </table>
   </div>`;
 
-  document.getElementById('modalEmailBody').innerHTML = cfgHTML + profTableHTML;
+  document.getElementById('modalEmailBody').innerHTML = profTableHTML;
 
   document.getElementById('modalEmailFooter').innerHTML = `
     <div id="emailProgressWrap" style="display:none;flex:1;margin-right:16px;">
