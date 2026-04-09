@@ -5535,8 +5535,6 @@ function abrirModalEmail() {
 }
 
 function _renderModalEmail() {
-  const cfg = state.config.emailConf || {};
-  const configurado = !!(cfg.gasUrl);
 
   const porProf = {};
   state.horario.forEach(h => { (porProf[h.profesorId] = porProf[h.profesorId] || []).push(h); });
@@ -5547,99 +5545,6 @@ function _renderModalEmail() {
 
   const sinEmail = profs.filter(p => !p.email).length;
   const profsSorted = profs;
-
-  // ── Script GAS para copiar ───────────────────────────────────────────────
-  const GAS_CODE = [
-    '// ═══ PUNTUAL – Script de envío de emails ═══',
-    '// Instrucciones:',
-    '//  1. Ir a script.google.com → Nuevo proyecto → pegar este código',
-    '//  2. Clic en "Implementar" → "Nueva implementación"',
-    '//     · Tipo: Aplicación web',
-    '//     · Ejecutar como: Yo',
-    '//     · Acceso: Cualquier persona',
-    '//  3. Autorizar los permisos de Gmail cuando lo pida',
-    '//  4. Copiar la URL de la Web App y pegarla abajo en PUNTUAL',
-    '//  ⚠️ Cada vez que modifiques el script debés crear una NUEVA implementación',
-    '//     (no "editar" la existente) para que los cambios tengan efecto.',
-    '',
-    'function doPost(e) {',
-    '  try {',
-    '    // Leer parámetros: e.parameter funciona para payloads chicos,',
-    '    // pero con adjuntos en base64 el body es grande y GAS lo manda a e.postData.',
-    '    var p = {};',
-    '    if (e.parameter && e.parameter.to_email) {',
-    '      p = e.parameter;',
-    '    } else if (e.postData && e.postData.contents) {',
-    '      e.postData.contents.split("&").forEach(function(pair) {',
-    '        var idx = pair.indexOf("=");',
-    '        if (idx > -1) {',
-    '          var key = decodeURIComponent(pair.slice(0, idx).replace(/\\+/g, " "));',
-    '          var val = decodeURIComponent(pair.slice(idx + 1).replace(/\\+/g, " "));',
-    '          p[key] = val;',
-    '        }',
-    '      });',
-    '    }',
-    '    if (!p.to_email) throw new Error("Sin destinatario");',
-    '    var options = { name: "PUNTUAL - Secretaria" };',
-    '    var attachments = [];',
-    '    if (p.filedata) {',
-    '      attachments.push(Utilities.newBlob(',
-    '        Utilities.base64Decode(p.filedata),',
-    '        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",',
-    '        p.filename || "Horario.xlsx"',
-    '      ));',
-    '    }',
-    '    if (p.icsdata) {',
-    '      attachments.push(Utilities.newBlob(',
-    '        Utilities.base64Decode(p.icsdata),',
-    '        "text/calendar",',
-    '        p.icsname || "Horario.ics"',
-    '      ));',
-    '    }',
-    '    if (p.htmldata) {',
-    '      attachments.push(Utilities.newBlob(',
-    '        Utilities.base64Decode(p.htmldata),',
-    '        "text/html",',
-    '        p.htmlname || "Formulario.html"',
-    '      ));',
-    '    }',
-    '    if (attachments.length) options.attachments = attachments;',
-    '    if (p.htmlbody) options.htmlBody = p.htmlbody;',
-    '    GmailApp.sendEmail(p.to_email, p.subject || "Horario", p.body || "", options);',
-    '    return ContentService',
-    '      .createTextOutput(JSON.stringify({ ok: true }))',
-    '      .setMimeType(ContentService.MimeType.JSON);',
-    '  } catch(err) {',
-    '    return ContentService',
-    '      .createTextOutput(JSON.stringify({ ok: false, error: err.toString() }))',
-    '      .setMimeType(ContentService.MimeType.JSON);',
-    '  }',
-    '}',
-    '',
-    '// Ejecutá esta función manualmente para verificar los permisos:',
-    'function testEnvio() {',
-    '  GmailApp.sendEmail(Session.getActiveUser().getEmail(),',
-    '    "PUNTUAL - Test OK", "El script está configurado correctamente.");',
-    '}',
-    '',
-    '// doGet permite verificar que el script está activo (responde a GET sin autenticación)',
-    'function doGet(e) {',
-    '  var to = e && e.parameter && e.parameter.to_email;',
-    '  if (to) {',
-    '    try {',
-    '      GmailApp.sendEmail(to, "PUNTUAL – Test de conexión",',
-    '        "Este es un email de prueba desde PUNTUAL. Si lo recibiste, el script funciona correctamente.");',
-    '      return ContentService.createTextOutput(JSON.stringify({ ok: true, sent_to: to }))',
-    '        .setMimeType(ContentService.MimeType.JSON);',
-    '    } catch(err) {',
-    '      return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.toString() }))',
-    '        .setMimeType(ContentService.MimeType.JSON);',
-    '    }',
-    '  }',
-    '  return ContentService.createTextOutput(JSON.stringify({ ok: true, status: "script activo", user: Session.getActiveUser().getEmail() }))',
-    '    .setMimeType(ContentService.MimeType.JSON);',
-    '}'
-  ].join('\n');
 
   // ── Lista de profesores ──────────────────────────────────────────────────
   const gasNote = '';
@@ -5732,56 +5637,6 @@ function _emailActualizarContador() {
 function _emailToggleTodos(sel) {
   document.querySelectorAll('.email-check:not(:disabled)').forEach(cb => { cb.checked = sel; });
   _emailActualizarContador();
-}
-
-function guardarEmailConf() {
-  if (!state.config.emailConf) state.config.emailConf = {};
-  const c = state.config.emailConf;
-  const url = (document.getElementById('gasUrl')?.value || '').trim();
-  if (!url) return alert('⚠️ Pegá la URL de la Web App de Google Apps Script.');
-  if (!url.includes('script.google.com') || !url.endsWith('/exec'))
-    return alert('⚠️ La URL debe ser de Google Apps Script y terminar en /exec');
-  c.gasUrl = url;
-  c.asunto = (document.getElementById('ejsAsunto')?.value || '').trim();
-  c.cuerpo =  document.getElementById('ejsCuerpo')?.value || '';
-  saveLocal();
-  document.getElementById('emailConfigDetails')?.removeAttribute('open');
-  const t = document.createElement('div');
-  t.textContent = '✅ Configuración guardada';
-  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#166534;color:#fff;padding:10px 22px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,.2);';
-  document.body.appendChild(t); setTimeout(() => t.remove(), 2500);
-}
-
-async function probarConexionGAS() {
-  const url = (document.getElementById('gasUrl')?.value || '').trim();
-  if (!url) return alert('⚠️ Primero pegá la URL de la Web App.');
-
-  const emailDestino = prompt('📧 Ingresá tu email para recibir el mail de prueba:');
-  if (!emailDestino || !emailDestino.includes('@')) return alert('⚠️ Email inválido.');
-
-  const btn = event.target;
-  btn.disabled = true; btn.textContent = '⏳ Enviando prueba…';
-
-  try {
-    // GET funciona sin problemas de CORS desde file:// y GAS responde con CORS headers
-    const testUrl = url + '?to_email=' + encodeURIComponent(emailDestino);
-    const resp = await fetch(testUrl, { method: 'GET' });
-    const txt  = await resp.text();
-    let result;
-    try { result = JSON.parse(txt); } catch(_) { result = { ok: false, error: 'Respuesta inesperada: ' + txt.slice(0, 200) }; }
-
-    if (result.ok && result.sent_to) {
-      alert(`✅ ¡Email de prueba enviado a ${emailDestino}!\n\nSi lo recibís, el script está funcionando correctamente y el envío de horarios también debería funcionar.\n\nSi no llega en 2 minutos, revisá la carpeta Spam.`);
-    } else if (result.ok) {
-      alert(`✅ Script activo (cuenta: ${result.user || 'desconocida'}).\n\nPero no pudo enviar el email de prueba. Asegurate de haber autorizado los permisos de Gmail al implementar.`);
-    } else {
-      alert(`❌ El script respondió con error:\n\n"${result.error}"\n\nSolución más común:\n1. Abrí script.google.com\n2. Ejecutá la función "testEnvio" manualmente (botón ▶ Ejecutar)\n3. Autorizá todos los permisos que pida\n4. Volvé a probar`);
-    }
-  } catch (err) {
-    alert('❌ No se pudo conectar.\n\nVerificá:\n• La URL termina en /exec\n• Acceso configurado como "Cualquier persona"\n• Tenés internet\n\nError: ' + err.message);
-  } finally {
-    btn.disabled = false; btn.textContent = '🔗 Probar conexión';
-  }
 }
 
 function actualizarEmailProf(profId, nuevoEmail, inputEl) {
