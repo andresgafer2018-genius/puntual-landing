@@ -6126,7 +6126,7 @@ async function enviarEmailsSeleccionados() {
   body: JSON.stringify({
     profesorNombre: prof.nombre,
     profesorEmail: prof.email,
-    escuelaNombre: params.escuela,
+    escuelaNombre: state.config?.nombreEscuela || 'La escuela',
     adjuntoBase64: base64,
     adjuntoNombre: archivoNombre
   })
