@@ -6128,7 +6128,8 @@ async function enviarEmailsSeleccionados() {
     profesorEmail: prof.email,
     escuelaNombre: state.config?.nombreEscuela || 'La escuela',
     adjuntoBase64: base64,
-    adjuntoNombre: archivoNombre
+    adjuntoNombre: archivoNombre,
+    htmlCuerpo: htmlbody
   })
 });
 if (!res.ok) throw new Error(await res.text());
