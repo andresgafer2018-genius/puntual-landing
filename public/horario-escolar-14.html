@@ -6097,7 +6097,8 @@ async function enviarEmailsSeleccionados() {
           .replace(/\n/g,'<br>');
         const linksHtml  = buildCalendarLinksHtml(prof);
         const htmlbody   = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#222;">'
-          + cuerpoHtmlTexto + linksHtml + '</div>';b
+          + cuerpoHtmlTexto + linksHtml + '</div>';
+          try {
 
       const res = await fetch('https://puntual-landing.vercel.app/api/email/horario', {
   method: 'POST',
