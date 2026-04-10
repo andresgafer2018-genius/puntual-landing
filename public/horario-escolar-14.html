@@ -5873,7 +5873,7 @@ function _buildProfCalendarLinks(prof) {
 
   // Próximo lunes como referenci
   const jsDay = hoy.getDay(); // a para los eventos
-  const hoy = new Date();/ 0=Dom, 1=Lun, ..., 6=Sáb
+  const hoy = new Date(); // 0=Dom, 1=Lun, ..., 6=Sáb
   const diasHastaLunes = ((1 - jsDay + 7) % 7) || 7;
   const lunesRef = new Date(hoy);
   lunesRef.setDate(hoy.getDate() + diasHastaLunes);
