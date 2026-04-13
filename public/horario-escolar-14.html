@@ -6126,8 +6126,6 @@ async function enviarEmailsSeleccionados() {
 })
 });
 if (!res.ok) throw new Error(await res.text());
-      // Con mode:'no-cors' la respuesta es opaca pero el POST llega al servidor GAS
-
       resultados.ok++;
     } catch (err) {
       resultados.errores.push(`${prof.apellido}, ${prof.nombre}: ${err.message}`);
