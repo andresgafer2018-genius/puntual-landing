@@ -1,6 +1,3 @@
-
- 
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -142,6 +139,10 @@ const TESTIMONIALS = [
   },
 ];
 
+// URL del video demo — reemplazá con tu video de YouTube cuando esté listo
+// Ejemplo: "https://www.youtube.com/embed/TU_VIDEO_ID"
+const DEMO_VIDEO_URL = null; // null = mostrar "próximamente"
+
 function useInView(threshold = 0.15) {
   const ref = useRef(null);
   const [inView, setInView] = useState(false);
@@ -173,9 +174,99 @@ function FadeIn({ children, delay = 0, className = "" }) {
   );
 }
 
+// Modal de demo
+function DemoModal({ open, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,.75)", backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#131827", border: "1px solid #1e2642",
+          borderRadius: 20, padding: 32, maxWidth: 720, width: "100%",
+          position: "relative",
+        }}
+      >
+        {/* Cerrar */}
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute", top: 16, right: 16,
+            background: "rgba(255,255,255,.08)", border: "none", borderRadius: "50%",
+            width: 32, height: 32, cursor: "pointer", color: "#8892b0",
+            fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          ✕
+        </button>
+
+        <h3 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 24, marginBottom: 8 }}>
+          Demo de Puntual
+        </h3>
+        <p style={{ fontSize: 14, color: "#8892b0", marginBottom: 24 }}>
+          Mirá cómo se genera un horario completo en segundos.
+        </p>
+
+        {DEMO_VIDEO_URL ? (
+          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
+            <iframe
+              src={DEMO_VIDEO_URL}
+              title="Demo Puntual"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              style={{
+                position: "absolute", top: 0, left: 0,
+                width: "100%", height: "100%", border: "none", borderRadius: 12,
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{
+            background: "#0c0f1a", border: "1px dashed #2a3a6a",
+            borderRadius: 12, padding: "56px 32px", textAlign: "center",
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Video demo próximamente</p>
+            <p style={{ fontSize: 14, color: "#4a5578" }}>
+              Mientras tanto, podés probar la app directamente.
+            </p>
+            <a
+              href="/login"
+              style={{
+                display: "inline-block", marginTop: 20,
+                background: "#4f8ef7", color: "#fff", borderRadius: 10,
+                padding: "10px 24px", fontSize: 14, fontWeight: 700,
+                textDecoration: "none",
+              }}
+            >
+              Empezar gratis →
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PuntualLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -187,6 +278,8 @@ export default function PuntualLanding() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     setMenuOpen(false);
   };
+
+  const goToLogin = () => { window.location.href = "/login"; };
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#0c0f1a", color: "#e8eaf2", minHeight: "100vh", overflowX: "hidden" }}>
@@ -275,6 +368,9 @@ export default function PuntualLanding() {
         }
       `}</style>
 
+      {/* MODAL DEMO */}
+      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
+
       {/* NAV */}
       <nav style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
@@ -296,8 +392,12 @@ export default function PuntualLanding() {
         </div>
 
         <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
-          <button className="btn-outline" style={{ padding: "8px 18px", fontSize: 13 }}>Iniciar sesión</button>
-          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: 13 }}>Empezar gratis</button>
+          <button className="btn-outline" style={{ padding: "8px 18px", fontSize: 13 }} onClick={goToLogin}>
+            Iniciar sesión
+          </button>
+          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: 13 }} onClick={goToLogin}>
+            Empezar gratis
+          </button>
         </div>
       </nav>
 
@@ -334,10 +434,10 @@ export default function PuntualLanding() {
             </p>
 
             <div className="hero-ctas" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="btn-primary" style={{ fontSize: 15, padding: "14px 30px" }}>
+              <button className="btn-primary" style={{ fontSize: 15, padding: "14px 30px" }} onClick={goToLogin}>
                 Empezar gratis →
               </button>
-              <button className="btn-outline" style={{ fontSize: 15, padding: "14px 30px" }}>
+              <button className="btn-outline" style={{ fontSize: 15, padding: "14px 30px" }} onClick={() => setDemoOpen(true)}>
                 Ver demo
               </button>
             </div>
@@ -549,6 +649,7 @@ export default function PuntualLanding() {
                   <button
                     className={p.highlight ? "btn-primary" : "btn-outline"}
                     style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
+                    onClick={goToLogin}
                   >
                     {p.cta}
                   </button>
@@ -571,7 +672,7 @@ export default function PuntualLanding() {
             <p style={{ fontSize: 17, color: "#8892b0", marginBottom: 40 }}>
               Gratis, sin tarjeta de crédito, sin letra chica.
             </p>
-            <button className="btn-primary" style={{ fontSize: 16, padding: "16px 40px" }}>
+            <button className="btn-primary" style={{ fontSize: 16, padding: "16px 40px" }} onClick={goToLogin}>
               Crear cuenta gratuita →
             </button>
             <p style={{ marginTop: 20, fontSize: 13, color: "#4a5578" }}>
