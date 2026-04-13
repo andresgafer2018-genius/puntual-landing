@@ -677,7 +677,7 @@ export default function PuntualLanding() {
             </button>
             <p style={{ marginTop: 20, fontSize: 13, color: "#4a5578" }}>
               ¿Tenés dudas? Escribinos a{" "}
-              <span style={{ color: "#4f8ef7" }}>puntalhorarios@gmail.com</span>
+              <span style={{ color: "#4f8ef7" }}>puntualhorarios@gmail.com</span>
             </p>
           </FadeIn>
         </div>
