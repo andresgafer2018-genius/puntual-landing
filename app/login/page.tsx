@@ -25,15 +25,32 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
     });
-    setLoading(false);
-    if (error) {
+
+    if (authError || !authData.user) {
+      setLoading(false);
       setError("Email o contraseña incorrectos.");
-    } else {
+      return;
+    }
+
+    // Chequear plan de la escuela
+    const { data: escuela } = await supabase
+      .from("escuelas")
+      .select("plan")
+      .eq("owner_id", authData.user.id)
+      .single();
+
+    setLoading(false);
+
+    if (escuela?.plan === "paid") {
       window.location.href = "/horario";
+    } else {
+      // plan free o sin escuela → ir a página de planes
+      window.location.href = "/planes";
     }
   }
 
@@ -75,7 +92,6 @@ export default function LoginPage() {
         }),
       });
     } catch (err) {
-      // Si falla el email de bienvenida no bloqueamos el registro
       console.error("Error enviando email de bienvenida:", err);
     }
 
