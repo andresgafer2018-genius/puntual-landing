@@ -118,7 +118,7 @@ const PLANS = [
 const TESTIMONIALS = [
   {
     quote:
-      "Antes tardábamos dos semanas en armar el horario. Con Puntual lo resolvemos en una tarde, sin errores.",
+      "Antes tardábamos  semanas en armar el horario. Con Puntual lo resolvemos en una tarde, sin errores.",
     name: "Lic. Graciela Montero",
     role: "Directora — Escuela Secundaria N°14",
     initials: "GM",
@@ -127,21 +127,17 @@ const TESTIMONIALS = [
     quote:
       "Por fin una herramienta pensada para la realidad de las escuelas argentinas. Simple, clara y que funciona.",
     name: "Prof. Hernán Ibáñez",
-    role: "Regente — Colegio San Martín",
+    role: "Rector — Colegio San Martín",
     initials: "HI",
   },
   {
     quote:
       "La detección de conflictos nos salvó varias veces. Ya no hay que revisar todo manualmente.",
-    name: "Mg. Silvana Reyes",
-    role: "Secretaria Académica — Instituto Provincial",
-    initials: "SR",
+    name: "Prof. Sebastián Perez",
+    role: "Secretaria Académica — Colegio San Patricio",
+    initials: "SP",
   },
 ];
-
-// URL del video demo — reemplazá con tu video de YouTube cuando esté listo
-// Ejemplo: "https://www.youtube.com/embed/TU_VIDEO_ID"
-const DEMO_VIDEO_URL = null; // null = mostrar "próximamente"
 
 function useInView(threshold = 0.15) {
   const ref = useRef(null);
@@ -174,99 +170,9 @@ function FadeIn({ children, delay = 0, className = "" }) {
   );
 }
 
-// Modal de demo
-function DemoModal({ open, onClose }) {
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
-    if (open) window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(0,0,0,.75)", backdropFilter: "blur(6px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 24,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "#131827", border: "1px solid #1e2642",
-          borderRadius: 20, padding: 32, maxWidth: 720, width: "100%",
-          position: "relative",
-        }}
-      >
-        {/* Cerrar */}
-        <button
-          onClick={onClose}
-          style={{
-            position: "absolute", top: 16, right: 16,
-            background: "rgba(255,255,255,.08)", border: "none", borderRadius: "50%",
-            width: 32, height: 32, cursor: "pointer", color: "#8892b0",
-            fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
-          }}
-        >
-          ✕
-        </button>
-
-        <h3 style={{ fontFamily: "'DM Serif Display', serif", fontSize: 24, marginBottom: 8 }}>
-          Demo de Puntual
-        </h3>
-        <p style={{ fontSize: 14, color: "#8892b0", marginBottom: 24 }}>
-          Mirá cómo se genera un horario completo en segundos.
-        </p>
-
-        {DEMO_VIDEO_URL ? (
-          <div style={{ position: "relative", paddingBottom: "56.25%", height: 0 }}>
-            <iframe
-              src={DEMO_VIDEO_URL}
-              title="Demo Puntual"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              style={{
-                position: "absolute", top: 0, left: 0,
-                width: "100%", height: "100%", border: "none", borderRadius: 12,
-              }}
-            />
-          </div>
-        ) : (
-          <div style={{
-            background: "#0c0f1a", border: "1px dashed #2a3a6a",
-            borderRadius: 12, padding: "56px 32px", textAlign: "center",
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🎬</div>
-            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Video demo próximamente</p>
-            <p style={{ fontSize: 14, color: "#4a5578" }}>
-              Mientras tanto, podés probar la app directamente.
-            </p>
-            <a
-              href="/login"
-              style={{
-                display: "inline-block", marginTop: 20,
-                background: "#4f8ef7", color: "#fff", borderRadius: 10,
-                padding: "10px 24px", fontSize: 14, fontWeight: 700,
-                textDecoration: "none",
-              }}
-            >
-              Empezar gratis →
-            </a>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function PuntualLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -278,8 +184,6 @@ export default function PuntualLanding() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
     setMenuOpen(false);
   };
-
-  const goToLogin = () => { window.location.href = "/login"; };
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#0c0f1a", color: "#e8eaf2", minHeight: "100vh", overflowX: "hidden" }}>
@@ -368,9 +272,6 @@ export default function PuntualLanding() {
         }
       `}</style>
 
-      {/* MODAL DEMO */}
-      <DemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
-
       {/* NAV */}
       <nav style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 200,
@@ -381,7 +282,7 @@ export default function PuntualLanding() {
         padding: "0 24px", height: 68,
         display: "flex", alignItems: "center", gap: 16,
       }}>
-        <img src="/logopuntual.png" alt="Puntual" style={{ height: 64, width: "auto", display: "block", flexShrink: 0 }} />
+        <img src="logopuntual.png" alt="Puntual" style={{ height: 44, width: "auto", display: "block", flexShrink: 0 }} />
 
         <div style={{ display: "flex", gap: 28, marginLeft: 32, flex: 1 }} className="desktop-nav">
           {NAV_LINKS.map((l) => (
@@ -392,12 +293,8 @@ export default function PuntualLanding() {
         </div>
 
         <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
-          <button className="btn-outline" style={{ padding: "8px 18px", fontSize: 13 }} onClick={goToLogin}>
-            Iniciar sesión
-          </button>
-          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: 13 }} onClick={goToLogin}>
-            Empezar gratis
-          </button>
+          <button className="btn-outline" style={{ padding: "8px 18px", fontSize: 13 }}>Iniciar sesión</button>
+          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: 13 }}>Empezar gratis</button>
         </div>
       </nav>
 
@@ -434,10 +331,10 @@ export default function PuntualLanding() {
             </p>
 
             <div className="hero-ctas" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="btn-primary" style={{ fontSize: 15, padding: "14px 30px" }} onClick={goToLogin}>
+              <button className="btn-primary" style={{ fontSize: 15, padding: "14px 30px" }}>
                 Empezar gratis →
               </button>
-              <button className="btn-outline" style={{ fontSize: 15, padding: "14px 30px" }} onClick={() => setDemoOpen(true)}>
+              <button className="btn-outline" style={{ fontSize: 15, padding: "14px 30px" }}>
                 Ver demo
               </button>
             </div>
@@ -447,54 +344,22 @@ export default function PuntualLanding() {
             </p>
           </div>
 
-          {/* Right — mock UI */}
+          {/* Right — screenshot real */}
           <div className="float" style={{ position: "relative" }}>
             <div style={{
               background: "#131827", border: "1px solid #1e2642", borderRadius: 20,
-              padding: 24, boxShadow: "0 40px 80px rgba(0,0,0,.5)",
+              overflow: "hidden", boxShadow: "0 40px 80px rgba(0,0,0,.5)",
             }}>
-              {/* Mock header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["#f74f6a", "#f7d04f", "#4ff7a8"].map((c, i) => (
-                    <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />
-                  ))}
-                </div>
-                <div style={{ flex: 1, background: "#1e2642", borderRadius: 6, height: 8 }} />
-              </div>
-
-              {/* Mock schedule grid */}
-              {["3°A", "3°B", "4°A", "4°B"].map((curso, ri) => (
-                <div key={ri} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                  <div style={{ width: 36, fontSize: 10, color: "#4a5578", display: "flex", alignItems: "center", flexShrink: 0 }}>{curso}</div>
-                  {[
-                    ["#4f8ef780", "Mate"], ["#f7854f80", "Len"], ["#4ff7a880", "Hist"],
-                    ["#c97ef780", "Bio"], ["#4f8ef780", "Fís"],
-                  ].map(([bg, label], ci) => (
-                    <div key={ci} style={{
-                      flex: 1, height: 32, background: bg, borderRadius: 6,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 9, fontWeight: 700, color: "#fff",
-                    }}>
-                      {label}
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-              {/* Badge */}
-              <div style={{
-                marginTop: 16, background: "rgba(79,247,168,.12)", border: "1px solid rgba(79,247,168,.25)",
-                borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
-              }}>
-                <span style={{ color: "#4ff7a8", fontSize: 13 }}>✓</span>
-                <span style={{ fontSize: 12, color: "#4ff7a8", fontWeight: 600 }}>Sin conflictos — 24 cursos generados</span>
-              </div>
+              <img
+                src="/screenshot-horario.png"
+                alt="Horario generado en Puntual"
+                style={{ width: "100%", display: "block", borderRadius: 20 }}
+              />
             </div>
 
             {/* Floating chips */}
             <div style={{ position: "absolute", top: -16, right: -20, background: "#1e2642", border: "1px solid #2a3a6a", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#4f8ef7" }}>
-              ⚡ Generado en 1.4s
+              ⚡ Generado en 24 segundos
             </div>
             <div style={{ position: "absolute", bottom: -14, left: -18, background: "#1e2642", border: "1px solid #2a3a6a", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#4ff7a8" }}>
               0 conflictos detectados
@@ -649,7 +514,6 @@ export default function PuntualLanding() {
                   <button
                     className={p.highlight ? "btn-primary" : "btn-outline"}
                     style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
-                    onClick={goToLogin}
                   >
                     {p.cta}
                   </button>
@@ -672,7 +536,7 @@ export default function PuntualLanding() {
             <p style={{ fontSize: 17, color: "#8892b0", marginBottom: 40 }}>
               Gratis, sin tarjeta de crédito, sin letra chica.
             </p>
-            <button className="btn-primary" style={{ fontSize: 16, padding: "16px 40px" }} onClick={goToLogin}>
+            <button className="btn-primary" style={{ fontSize: 16, padding: "16px 40px" }}>
               Crear cuenta gratuita →
             </button>
             <p style={{ marginTop: 20, fontSize: 13, color: "#4a5578" }}>
