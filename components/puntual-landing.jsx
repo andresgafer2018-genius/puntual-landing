@@ -69,52 +69,59 @@ const STEPS = [
   },
 ];
 
+const AHORRO_ANUAL = Math.round((1 - 1440 / (150 * 12)) * 100);
+
 const PLANS = [
   {
-    name: "Básico",
+    name: "Prueba gratuita",
     price: "$0",
-    period: "para siempre",
-    desc: "Ideal para escuelas pequeñas que empiezan.",
+    period: "15 días · Solo una vez",
+    desc: "Para conocer la plataforma antes de comprometerte.",
     features: [
+      "15 días de acceso completo",
       "Hasta 5 cursos",
       "Hasta 15 docentes",
       "Generación automática",
-      "Exportación PDF",
+      "Exportación PDF y Excel",
     ],
     cta: "Empezar gratis",
     highlight: false,
+    badge: null,
   },
   {
-    name: "Estándar",
-    price: "A consultar",
-    period: "",
-    desc: "Para instituciones en crecimiento que necesitan más control.",
+    name: "Plan Anual",
+    price: "$120",
+    period: "/mes · $1.440 al año",
+    desc: "El más elegido. Ahorrás pagando por adelantado.",
     features: [
-      "Hasta 12 cursos",
-      "Hasta 180 alumnos",
+      "12 meses de acceso",
+      "Cursos ilimitados",
       "Docentes ilimitados",
-      "Un solo nivel",
+      "Generación automática",
+      "Exportación PDF y Excel",
+      "Soporte prioritario",
+      "Actualizaciones incluidas",
+    ],
+    cta: "Contratar plan anual →",
+    highlight: true,
+    badge: `🎉 Ahorrás ${AHORRO_ANUAL}% vs mensual`,
+  },
+  {
+    name: "Plan Mensual",
+    price: "$150",
+    period: "/mes",
+    desc: "Flexibilidad total, cancelá cuando quieras.",
+    features: [
+      "Acceso mes a mes",
+      "Cursos ilimitados",
+      "Docentes ilimitados",
+      "Generación automática",
       "Exportación PDF y Excel",
       "Soporte prioritario",
     ],
-    cta: "Probar gratis",
-    highlight: true,
-  },
-  {
-    name: "Institucional",
-    price: "A consultar",
-    period: "",
-    desc: "Para todo tipo de escuelas y organismos educativos.",
-    features: [
-      "Cursos ilimitados",
-      "Docentes ilimitados",
-      "Multi-sede",
-      "Multi-nivel",
-      "Onboarding personalizado",
-      "SLA garantizado",
-    ],
-    cta: "Contactar",
+    cta: "Contratar plan mensual →",
     highlight: false,
+    badge: null,
   },
 ];
 
@@ -505,6 +512,16 @@ export default function PuntualLanding() {
                     <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 40, color: "#e8eaf2" }}>{p.price}</span>
                     {p.period && <span style={{ fontSize: 13, color: "#4a5578" }}>{p.period}</span>}
                   </div>
+                  {p.badge && (
+                    <div style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      background: "rgba(79,247,168,.12)", color: "#4ff7a8",
+                      border: "1px solid rgba(79,247,168,.25)", borderRadius: 100,
+                      fontSize: 12, fontWeight: 700, padding: "4px 12px", marginBottom: 12,
+                    }}>
+                      {p.badge}
+                    </div>
+                  )}
                   <p style={{ fontSize: 13, color: "#4a5578", marginBottom: 24 }}>{p.desc}</p>
 
                   <ul style={{ listStyle: "none", marginBottom: 28 }}>
