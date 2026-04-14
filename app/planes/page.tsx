@@ -64,7 +64,7 @@ export default function PlanesPage() {
           </p>
 
           <a
-            href="mailto:puntalhorarios@gmail.com?subject=Quiero activar mi suscripción"
+            href="mailto:puntualhorarios@gmail.com?subject=Quiero activar mi suscripción"
             style={{
               display: "inline-flex", alignItems: "center", gap: 8,
               background: "#4f8ef7", color: "#fff", borderRadius: 10,
@@ -76,7 +76,7 @@ export default function PlanesPage() {
           </a>
 
           <p style={{ marginTop: 16, fontSize: 13, color: "#4a5578" }}>
-            puntalhorarios@gmail.com
+            puntualhorarios@gmail.com
           </p>
         </div>
 
