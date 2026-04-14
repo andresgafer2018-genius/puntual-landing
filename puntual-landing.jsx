@@ -344,54 +344,22 @@ export default function PuntualLanding() {
             </p>
           </div>
 
-          {/* Right — mock UI */}
+          {/* Right — screenshot real */}
           <div className="float" style={{ position: "relative" }}>
             <div style={{
               background: "#131827", border: "1px solid #1e2642", borderRadius: 20,
-              padding: 24, boxShadow: "0 40px 80px rgba(0,0,0,.5)",
+              overflow: "hidden", boxShadow: "0 40px 80px rgba(0,0,0,.5)",
             }}>
-              {/* Mock header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["#f74f6a", "#f7d04f", "#4ff7a8"].map((c, i) => (
-                    <div key={i} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />
-                  ))}
-                </div>
-                <div style={{ flex: 1, background: "#1e2642", borderRadius: 6, height: 8 }} />
-              </div>
-
-              {/* Mock schedule grid */}
-              {["3°A", "3°B", "4°A", "4°B"].map((curso, ri) => (
-                <div key={ri} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                  <div style={{ width: 36, fontSize: 10, color: "#4a5578", display: "flex", alignItems: "center", flexShrink: 0 }}>{curso}</div>
-                  {[
-                    ["#4f8ef780", "Mate"], ["#f7854f80", "Len"], ["#4ff7a880", "Hist"],
-                    ["#c97ef780", "Bio"], ["#4f8ef780", "Fís"],
-                  ].map(([bg, label], ci) => (
-                    <div key={ci} style={{
-                      flex: 1, height: 32, background: bg, borderRadius: 6,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 9, fontWeight: 700, color: "#fff",
-                    }}>
-                      {label}
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-              {/* Badge */}
-              <div style={{
-                marginTop: 16, background: "rgba(79,247,168,.12)", border: "1px solid rgba(79,247,168,.25)",
-                borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
-              }}>
-                <span style={{ color: "#4ff7a8", fontSize: 13 }}>✓</span>
-                <span style={{ fontSize: 12, color: "#4ff7a8", fontWeight: 600 }}>Sin conflictos — 24 cursos generados</span>
-              </div>
+              <img
+                src="/screenshot-horario.png"
+                alt="Horario generado en Puntual"
+                style={{ width: "100%", display: "block", borderRadius: 20 }}
+              />
             </div>
 
             {/* Floating chips */}
             <div style={{ position: "absolute", top: -16, right: -20, background: "#1e2642", border: "1px solid #2a3a6a", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#4f8ef7" }}>
-              ⚡ Generado en 1.4s
+              ⚡ Generado en 24 segundos
             </div>
             <div style={{ position: "absolute", bottom: -14, left: -18, background: "#1e2642", border: "1px solid #2a3a6a", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: "#4ff7a8" }}>
               0 conflictos detectados
