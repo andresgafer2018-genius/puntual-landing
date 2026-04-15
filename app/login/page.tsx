@@ -64,7 +64,7 @@ export default function LoginPage() {
           return;
         }
       }
-      window.location.href = "/horario";
+      window.location.href = "/horario-escolar-14.html";
       return;
     }
 
@@ -126,7 +126,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (!autoLoginError) {
-      window.location.href = "/horario";
+      window.location.href = "/horario-escolar-14.html";
       return;
     }
 
