@@ -51,15 +51,12 @@ export default function LoginPage() {
     const ahora = new Date();
     const vence = escuela.plan_vence ? new Date(escuela.plan_vence) : null;
 
-    // Si venció → a planes
     if (vence && ahora > vence) {
       window.location.href = "/planes?motivo=vencido";
       return;
     }
 
-    // Si tiene plan activo (trial o pago) → a la app
     if (escuela.plan === "trial" || escuela.plan === "mensual" || escuela.plan === "anual") {
-      // Si faltan 5 días o menos, agregar parámetro de aviso
       if (vence) {
         const diasRestantes = Math.ceil((vence.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24));
         if (diasRestantes <= 5) {
@@ -71,7 +68,6 @@ export default function LoginPage() {
       return;
     }
 
-    // plan = 'free' sin activar → a planes
     window.location.href = "/planes";
   }
 
@@ -85,11 +81,13 @@ export default function LoginPage() {
     setLoading(true);
 
     // 1. Crear usuario en Supabase Auth
+    // emailRedirectTo apunta a /auth/callback que maneja la sesión y redirige a /horario
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: regEmail,
       password: regPassword,
       options: {
         data: { nombre: regNombre, nombre_escuela: regEscuela },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
@@ -129,7 +127,7 @@ export default function LoginPage() {
     }
 
     setLoading(false);
-    setSuccess("¡Cuenta creada con 15 días de prueba gratis! Revisá tu email para confirmar el registro.");
+    setSuccess("¡Cuenta creada! Revisá tu email y hacé clic en el link para ingresar a la app.");
   }
 
   return (
