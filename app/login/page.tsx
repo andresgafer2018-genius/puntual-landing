@@ -81,7 +81,6 @@ export default function LoginPage() {
     setLoading(true);
 
     // 1. Crear usuario en Supabase Auth
-    // emailRedirectTo apunta a /auth/callback que maneja la sesión y redirige a /horario
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: regEmail,
       password: regPassword,
@@ -111,26 +110,18 @@ export default function LoginPage() {
       trial_usado: true,
     });
 
-    // 3. Email de bienvenida
-    try {
-      await fetch("/api/email/bienvenida", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nombre: regNombre,
-          escuelaNombre: regEscuela,
-          email: regEmail,
-        }),
-      });
-    } catch (err) {
-      console.error("Error enviando email de bienvenida:", err);
-    }
-
-    // Intentar login automático (funciona cuando "Confirm email" está desactivado)
+    // 3. Auto-login (funciona cuando "Confirm email" está desactivado en Supabase)
     const { error: autoLoginError } = await supabase.auth.signInWithPassword({
       email: regEmail,
       password: regPassword,
     });
+
+    // 4. Email de bienvenida en segundo plano (no bloquea el flujo)
+    fetch("/api/email/bienvenida", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre: regNombre, escuelaNombre: regEscuela, email: regEmail }),
+    }).catch(err => console.error("Error email bienvenida:", err));
 
     setLoading(false);
 
@@ -139,9 +130,10 @@ export default function LoginPage() {
       return;
     }
 
-    // Si falla (ej: confirm email activado), mostrar mensaje para revisar email
+    // Si falla el auto-login (confirm email activado) → pedir que confirme email
     setSuccess("¡Cuenta creada! Revisá tu email y hacé clic en el link para ingresar a la app.");
   }
+
 
   return (
     <div style={{
