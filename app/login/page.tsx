@@ -126,7 +126,20 @@ export default function LoginPage() {
       console.error("Error enviando email de bienvenida:", err);
     }
 
+    // Intentar login automático (funciona cuando "Confirm email" está desactivado)
+    const { error: autoLoginError } = await supabase.auth.signInWithPassword({
+      email: regEmail,
+      password: regPassword,
+    });
+
     setLoading(false);
+
+    if (!autoLoginError) {
+      window.location.href = "/horario";
+      return;
+    }
+
+    // Si falla (ej: confirm email activado), mostrar mensaje para revisar email
     setSuccess("¡Cuenta creada! Revisá tu email y hacé clic en el link para ingresar a la app.");
   }
 
