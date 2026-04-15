@@ -60,11 +60,11 @@ export default function LoginPage() {
       if (vence) {
         const diasRestantes = Math.ceil((vence.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24));
         if (diasRestantes <= 5) {
-          window.location.href = `/horario?aviso=vence_en_${diasRestantes}`;
+          window.location.href = `/horario-escolar-14.html?aviso=vence_en_${diasRestantes}`;
           return;
         }
       }
-      window.location.href = "/horario-escolar-14.html";
+      window.location.href = "/horario";
       return;
     }
 
@@ -96,19 +96,27 @@ export default function LoginPage() {
       return;
     }
 
-    // 2. Crear registro en tabla escuelas con trial de 15 días
-    const ahora = new Date();
-    const vence = new Date(ahora);
-    vence.setDate(vence.getDate() + 15);
+    // 2. Crear registro en tabla escuelas con trial de 15 días (solo si no existe ya)
+    const { data: escuelaExistente } = await supabase
+      .from("escuelas")
+      .select("id")
+      .eq("owner_id", authData.user.id)
+      .single();
 
-    await supabase.from("escuelas").insert({
-      nombre: regEscuela,
-      owner_id: authData.user.id,
-      plan: "trial",
-      plan_inicio: ahora.toISOString(),
-      plan_vence: vence.toISOString(),
-      trial_usado: true,
-    });
+    if (!escuelaExistente) {
+      const ahora = new Date();
+      const vence = new Date(ahora);
+      vence.setDate(vence.getDate() + 15);
+
+      await supabase.from("escuelas").insert({
+        nombre: regEscuela,
+        owner_id: authData.user.id,
+        plan: "trial",
+        plan_inicio: ahora.toISOString(),
+        plan_vence: vence.toISOString(),
+        trial_usado: true,
+      });
+    }
 
     // 3. Auto-login (funciona cuando "Confirm email" está desactivado en Supabase)
     const { error: autoLoginError } = await supabase.auth.signInWithPassword({
@@ -126,7 +134,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (!autoLoginError) {
-      window.location.href = "/horario-escolar-14.html";
+      window.location.href = "/horario";
       return;
     }
 
