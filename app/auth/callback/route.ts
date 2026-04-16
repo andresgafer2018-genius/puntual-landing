@@ -1,22 +1,33 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const error = searchParams.get("error");
 
+  // Si Supabase mandó un error explícito
+  if (error) {
+    return NextResponse.redirect(`${origin}/login?msg=error`);
+  }
+
+  // Flujo normal con code (PKCE)
   if (code) {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return NextResponse.redirect(`${origin}/horario`);
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+    if (!exchangeError) {
+      // Confirmación exitosa → va directo a la app
+      return NextResponse.redirect(`${origin}/horario-escolar-14.html`);
     }
   }
 
-  return NextResponse.redirect(`${origin}/login?error=confirmacion_fallida`);
+  // Sin code y sin error → confirmación exitosa por hash (Supabase implicit flow)
+  // El usuario ya está autenticado en el cliente, solo necesita el aviso
+  return NextResponse.redirect(`${origin}/login?msg=confirmado`);
 }
