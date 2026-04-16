@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { Suspense } from "react";
 
 type Tab = "login" | "registro";
 
-export default function LoginPage() {
+function LoginContent() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -18,6 +21,17 @@ export default function LoginPage() {
   const [regEscuela, setRegEscuela] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
+
+  useEffect(() => {
+    const msg = searchParams.get("msg");
+    if (msg === "confirmado") {
+      setTab("login");
+      setSuccess("✅ ¡Email confirmado! Ahora iniciá sesión para acceder a la app.");
+    } else if (msg === "error") {
+      setTab("login");
+      setError("El link de confirmación no es válido o ya expiró. Intentá iniciar sesión o registrarte de nuevo.");
+    }
+  }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +94,6 @@ export default function LoginPage() {
     }
     setLoading(true);
 
-    // 1. Crear usuario en Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: regEmail,
       password: regPassword,
@@ -96,7 +109,6 @@ export default function LoginPage() {
       return;
     }
 
-    // 2. Crear registro en tabla escuelas con trial de 15 días (solo si no existe ya)
     const { data: escuelaExistente } = await supabase
       .from("escuelas")
       .select("id")
@@ -118,13 +130,13 @@ export default function LoginPage() {
       });
     }
 
-    // 3. Auto-login (funciona cuando "Confirm email" está desactivado en Supabase)
+    // Auto-login (funciona cuando "Confirm email" está desactivado)
     const { error: autoLoginError } = await supabase.auth.signInWithPassword({
       email: regEmail,
       password: regPassword,
     });
 
-    // 4. Email de bienvenida en segundo plano (no bloquea el flujo)
+    // Email de bienvenida en segundo plano
     fetch("/api/email/bienvenida", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -138,10 +150,9 @@ export default function LoginPage() {
       return;
     }
 
-    // Si falla el auto-login (confirm email activado) → pedir que confirme email
+    // Confirm email activado → mostrar aviso
     setSuccess("¡Cuenta creada! Revisá tu email y hacé clic en el link para ingresar a la app.");
   }
-
 
   return (
     <div style={{
@@ -280,4 +291,12 @@ function btnStyle(loading: boolean): React.CSSProperties {
     fontSize: 15, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer",
     fontFamily: "'DM Sans', sans-serif", transition: "background .2s", marginTop: 4,
   };
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
+  );
 }
