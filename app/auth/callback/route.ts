@@ -6,9 +6,14 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
+  const errorCode = searchParams.get("error_code");
 
   // Si Supabase mandó un error explícito
   if (error) {
+    // otp_expired/otp_already_used = link ya usado → el email YA estaba confirmado
+    if (errorCode === "otp_expired" || errorCode === "otp_already_used") {
+      return NextResponse.redirect(`${origin}/login?msg=confirmado`);
+    }
     return NextResponse.redirect(`${origin}/login?msg=error`);
   }
 
