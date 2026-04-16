@@ -1317,14 +1317,16 @@ function saveProfesor() {
     materias,
     disponibilidad: JSON.parse(JSON.stringify(tempAvail)),
   };
+  
   if (editId) {
-    const idx = state.profesores.findIndex(x=>x.id===editId);
-    state.profesores[idx] = obj;
-  } else {
-    state.profesores.push(obj);
-  }
-  saveLocal(); closeModal('modalProf'); renderProfesores(); updateBadges(); renderDashboard();
-}
+      const idx = state.profesores.findIndex(x=>x.id===editId);
+      state.profesores[idx] = obj;
+    } else if (state.profesores.length >= 15) {
+      alert('⚠️ Tu plan de prueba permite hasta 15 profesores. Contratá un plan para agregar más.');
+      return;
+    } else {
+      state.profesores.push(obj);
+    }
 
 function renderProfesores() {
   const tbody = document.getElementById('profBody');
@@ -1575,6 +1577,9 @@ function saveCurso() {
   if (editId) {
     const idx = state.cursos.findIndex(x=>x.id===editId);
     state.cursos[idx] = obj;
+ } else if (state.cursos.length >= 5) {
+    alert('⚠️ Tu plan de prueba permite hasta 5 cursos. Contratá un plan para agregar más.');
+    return;
   } else {
     state.cursos.push(obj);
   }
@@ -5032,7 +5037,7 @@ function exportarExcel() {
 }
 
 // ── Formulario de Disponibilidad Docente ─────────────────────────────────
-function abrirModalFormDisp() {
+function abrirModalFormDisp(
   if (!state.profesores.length)
     return alert('No hay profesores cargados. Agregá profesores primero.');
   _renderModalFormDisp();
