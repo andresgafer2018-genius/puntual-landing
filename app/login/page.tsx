@@ -31,6 +31,10 @@ function LoginContent() {
       setTab("login");
       setError("El link de confirmación no es válido o ya expiró. Intentá iniciar sesión o registrarte de nuevo.");
     }
+    // Limpiar el hash que Supabase agrega (#error=access_denied&...) para que no interfiera
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
   }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
