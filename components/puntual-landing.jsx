@@ -306,7 +306,7 @@ export default function PuntualLanding() {
 
         <div style={{ display: "flex", gap: 10, marginLeft: "auto" }}>
           <button className="btn-outline" style={{ padding: "8px 18px", fontSize: 13 }} onClick={() => router.push("/login")}>Iniciar sesión</button>
-          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: 13 }} onClick={() => router.push("/login")}>Empezar gratis</button>
+          <button className="btn-primary" style={{ padding: "8px 18px", fontSize: 13 }} onClick={() => router.push("/login?tab=registro")}>Empezar gratis</button>
         </div>
       </nav>
 
@@ -343,7 +343,7 @@ export default function PuntualLanding() {
             </p>
 
             <div className="hero-ctas" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="btn-primary" style={{ fontSize: 15, padding: "14px 30px" }} onClick={() => router.push("/login")}>
+              <button className="btn-primary" style={{ fontSize: 15, padding: "14px 30px" }} onClick={() => router.push("/login?tab=registro")}>
                 Empezar gratis →
               </button>
               <button className="btn-outline" style={{ fontSize: 15, padding: "14px 30px" }} onClick={() => setDemoOpen(true)}>
@@ -536,7 +536,7 @@ export default function PuntualLanding() {
                   <button
                     className={p.highlight ? "btn-primary" : "btn-outline"}
                     style={{ width: "100%", justifyContent: "center", fontSize: 14 }}
-                    onClick={() => router.push("/login")}
+                    onClick={() => router.push(i === 0 ? "/login?tab=registro" : "/login")}
                   >
                     {p.cta}
                   </button>
@@ -559,7 +559,7 @@ export default function PuntualLanding() {
             <p style={{ fontSize: 17, color: "#8892b0", marginBottom: 40 }}>
               Gratis, sin tarjeta de crédito, sin letra chica.
             </p>
-            <button className="btn-primary" style={{ fontSize: 16, padding: "16px 40px" }} onClick={() => router.push("/login")}>
+            <button className="btn-primary" style={{ fontSize: 16, padding: "16px 40px" }} onClick={() => router.push("/login?tab=registro")}>
               Crear cuenta gratuita →
             </button>
             <p style={{ marginTop: 20, fontSize: 13, color: "#4a5578" }}>
@@ -608,7 +608,7 @@ export default function PuntualLanding() {
                 <p style={{ color: "#8892b0", fontSize: 15, lineHeight: 1.65, marginBottom: 28 }}>
                   Estamos preparando el video demo. Mientras tanto, podés empezar gratis y explorar la app por tu cuenta.
                 </p>
-                <button className="btn-primary" style={{ fontSize: 15, padding: "12px 28px" }} onClick={() => { setDemoOpen(false); router.push("/login"); }}>
+                <button className="btn-primary" style={{ fontSize: 15, padding: "12px 28px" }} onClick={() => { setDemoOpen(false); router.push("/login?tab=registro"); }}>
                   Empezar gratis →
                 </button>
               </>
