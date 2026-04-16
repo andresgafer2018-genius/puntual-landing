@@ -416,6 +416,31 @@ tr:hover td { background:rgba(79,142,247,.04); }
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
+  
+<!-- BANNER VENCIMIENTO -->
+<div id="bannerVencimiento" style="display:none; position:fixed; top:0; left:0; right:0; z-index:9999; background:#f74f6a; color:#fff; text-align:center; padding:12px 20px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600;">
+  <span id="bannerTexto"></span>
+  &nbsp;·&nbsp;
+  <a href="/planes" style="color:#fff; text-decoration:underline;">Ver planes →</a>
+  &nbsp;&nbsp;
+  <span onclick="document.getElementById('bannerVencimiento').style.display='none'" style="cursor:pointer; opacity:.7;">✕</span>
+</div>
+<script>
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    const aviso = params.get('aviso');
+    if (aviso && aviso.startsWith('vence_en_')) {
+      const dias = aviso.replace('vence_en_', '');
+      const banner = document.getElementById('bannerVencimiento');
+      const texto = document.getElementById('bannerTexto');
+      texto.textContent = dias == 1
+        ? '⚠️ Tu plan vence mañana'
+        : `⚠️ Tu plan vence en ${dias} días`;
+      banner.style.display = 'block';
+    }
+  })();
+</script>
+<!-- FIN BANNER -->
 
 <!-- Overlay de carga: bloquea la UI mientras autoGenerar trabaja -->
 <div id="loadingOverlay">
