@@ -24,12 +24,15 @@ function LoginContent() {
 
   useEffect(() => {
     const msg = searchParams.get("msg");
+    const tabParam = searchParams.get("tab");
     if (msg === "confirmado") {
       setTab("login");
       setSuccess("✅ ¡Email confirmado! Ahora iniciá sesión para acceder a la app.");
     } else if (msg === "error") {
       setTab("login");
       setError("El link de confirmación no es válido o ya expiró. Intentá iniciar sesión o registrarte de nuevo.");
+    } else if (tabParam === "registro") {
+      setTab("registro");
     }
     // Limpiar el hash que Supabase agrega (#error=access_denied&...) para que no interfiera
     if (window.location.hash) {
