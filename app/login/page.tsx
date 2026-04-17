@@ -45,51 +45,20 @@ function LoginContent() {
     setError("");
     setLoading(true);
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { error: authError } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
     });
 
-    if (authError || !authData.user) {
+    if (authError) {
       setLoading(false);
       setError("Email o contraseña incorrectos.");
       return;
     }
 
-    const { data: escuela } = await supabase
-      .from("escuelas")
-      .select("plan, plan_vence")
-      .eq("owner_id", authData.user.id)
-      .single();
-
-    setLoading(false);
-
-    if (!escuela) {
-      window.location.href = "/planes";
-      return;
-    }
-
-    const ahora = new Date();
-    const vence = escuela.plan_vence ? new Date(escuela.plan_vence) : null;
-
-    if (vence && ahora > vence) {
-      window.location.href = "/planes?motivo=vencido";
-      return;
-    }
-
-    if (escuela.plan === "trial" || escuela.plan === "mensual" || escuela.plan === "anual") {
-      if (vence) {
-        const diasRestantes = Math.ceil((vence.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24));
-        if (diasRestantes <= 5) {
-          window.location.href = `/horario-escolar-14.html?aviso=vence_en_${diasRestantes}`;
-          return;
-        }
-      }
-      window.location.href = "/horario-escolar-14.html";
-      return;
-    }
-
-    window.location.href = "/planes";
+    // La app (horario-escolar-14.html) decide con initPlan() qué mostrar
+    // según el plan del usuario: banner de trial, redirect a /planes si venció, etc.
+    window.location.href = "/horario-escolar-14.html";
   }
 
   async function handleRegistro(e: React.FormEvent) {
