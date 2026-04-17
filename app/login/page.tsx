@@ -70,6 +70,8 @@ function LoginContent() {
     }
     setLoading(true);
 
+    // Crea el usuario en Supabase Auth y manda email de confirmación.
+    // El nombre de la escuela se guarda en user_metadata para que el callback lo use.
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: regEmail,
       password: regPassword,
@@ -85,48 +87,7 @@ function LoginContent() {
       return;
     }
 
-    const { data: escuelaExistente } = await supabase
-      .from("escuelas")
-      .select("id")
-      .eq("owner_id", authData.user.id)
-      .single();
-
-    if (!escuelaExistente) {
-      const ahora = new Date();
-      const vence = new Date(ahora);
-      vence.setDate(vence.getDate() + 15);
-
-      const payload = {
-        nombre: regEscuela,
-        owner_id: authData.user.id,
-        plan: "trial",
-        plan_inicio: ahora.toISOString(),
-        plan_vence: vence.toISOString(),
-        trial_usado: true,
-      };
-
-      console.log("🔍 [DEBUG] Payload del insert:", payload);
-
-      const { data: insertData, error: insertError } = await supabase
-        .from("escuelas")
-        .insert(payload)
-        .select();
-
-      if (insertError) {
-        console.error("❌ [DEBUG] Error del insert:", insertError);
-        console.error("❌ [DEBUG] Detalles:", JSON.stringify(insertError, null, 2));
-      } else {
-        console.log("✅ [DEBUG] Fila creada:", insertData);
-      }
-    }
-
-    // Auto-login (funciona cuando "Confirm email" está desactivado)
-    const { error: autoLoginError } = await supabase.auth.signInWithPassword({
-      email: regEmail,
-      password: regPassword,
-    });
-
-    // Email de bienvenida en segundo plano
+    // Email de bienvenida en segundo plano (no bloquea el flujo)
     fetch("/api/email/bienvenida", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -135,12 +96,8 @@ function LoginContent() {
 
     setLoading(false);
 
-    if (!autoLoginError) {
-      window.location.href = "/horario-escolar-14.html";
-      return;
-    }
-
-    // Confirm email activado → mostrar aviso
+    // La fila en 'escuelas' se crea en /auth/callback después de confirmar el email,
+    // cuando hay sesión activa y RLS permite el INSERT.
     setSuccess("¡Cuenta creada! Revisá tu email y hacé clic en el link para ingresar a la app.");
   }
 
