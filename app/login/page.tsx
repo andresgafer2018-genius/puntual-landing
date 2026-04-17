@@ -96,14 +96,28 @@ function LoginContent() {
       const vence = new Date(ahora);
       vence.setDate(vence.getDate() + 15);
 
-      await supabase.from("escuelas").insert({
+      const payload = {
         nombre: regEscuela,
         owner_id: authData.user.id,
         plan: "trial",
         plan_inicio: ahora.toISOString(),
         plan_vence: vence.toISOString(),
         trial_usado: true,
-      });
+      };
+
+      console.log("🔍 [DEBUG] Payload del insert:", payload);
+
+      const { data: insertData, error: insertError } = await supabase
+        .from("escuelas")
+        .insert(payload)
+        .select();
+
+      if (insertError) {
+        console.error("❌ [DEBUG] Error del insert:", insertError);
+        console.error("❌ [DEBUG] Detalles:", JSON.stringify(insertError, null, 2));
+      } else {
+        console.log("✅ [DEBUG] Fila creada:", insertData);
+      }
     }
 
     // Auto-login (funciona cuando "Confirm email" está desactivado)
