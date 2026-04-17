@@ -414,33 +414,9 @@ tr:hover td { background:rgba(79,142,247,.04); }
 }
 </style>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  
-<!-- BANNER VENCIMIENTO -->
-<div id="bannerVencimiento" style="display:none; position:fixed; top:0; left:0; right:0; z-index:9999; background:#f74f6a; color:#fff; text-align:center; padding:12px 20px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600;">
-  <span id="bannerTexto"></span>
-  &nbsp;·&nbsp;
-  <a href="/planes" style="color:#fff; text-decoration:underline;">Ver planes →</a>
-  &nbsp;&nbsp;
-  <span onclick="document.getElementById('bannerVencimiento').style.display='none'" style="cursor:pointer; opacity:.7;">✕</span>
-</div>
-<script>
-  (function() {
-    const params = new URLSearchParams(window.location.search);
-    const aviso = params.get('aviso');
-    if (aviso && aviso.startsWith('vence_en_')) {
-      const dias = aviso.replace('vence_en_', '');
-      const banner = document.getElementById('bannerVencimiento');
-      const texto = document.getElementById('bannerTexto');
-      texto.textContent = dias == 1
-        ? '⚠️ Tu plan vence mañana'
-        : `⚠️ Tu plan vence en ${dias} días`;
-      banner.style.display = 'block';
-    }
-  })();
-</script>
-<!-- FIN BANNER -->
 
 <!-- Overlay de carga: bloquea la UI mientras autoGenerar trabaja -->
 <div id="loadingOverlay">
@@ -1317,16 +1293,16 @@ function saveProfesor() {
     materias,
     disponibilidad: JSON.parse(JSON.stringify(tempAvail)),
   };
-  
   if (editId) {
-      const idx = state.profesores.findIndex(x=>x.id===editId);
-      state.profesores[idx] = obj;
-    } else if (state.profesores.length >= 15) {
-      alert('⚠️ Tu plan de prueba permite hasta 15 profesores. Contratá un plan para agregar más.');
-      return;
-    } else {
-      state.profesores.push(obj);
-    }
+    const idx = state.profesores.findIndex(x=>x.id===editId);
+    state.profesores[idx] = obj;
+  } else {
+    // Gate de plan: solo para creación nueva
+    if (typeof checkLimitePlan === 'function' && !checkLimitePlan('profesores')) return;
+    state.profesores.push(obj);
+  }
+  saveLocal(); closeModal('modalProf'); renderProfesores(); updateBadges(); renderDashboard();
+}
 
 function renderProfesores() {
   const tbody = document.getElementById('profBody');
@@ -1577,10 +1553,9 @@ function saveCurso() {
   if (editId) {
     const idx = state.cursos.findIndex(x=>x.id===editId);
     state.cursos[idx] = obj;
- } else if (state.cursos.length >= 5) {
-    alert('⚠️ Tu plan de prueba permite hasta 5 cursos. Contratá un plan para agregar más.');
-    return;
   } else {
+    // Gate de plan: solo para creación nueva
+    if (typeof checkLimitePlan === 'function' && !checkLimitePlan('cursos')) return;
     state.cursos.push(obj);
   }
   saveLocal(); closeModal('modalCur'); renderCursos(); updateBadges(); renderDashboard();
@@ -5037,7 +5012,7 @@ function exportarExcel() {
 }
 
 // ── Formulario de Disponibilidad Docente ─────────────────────────────────
-function abrirModalFormDisp(
+function abrirModalFormDisp() {
   if (!state.profesores.length)
     return alert('No hay profesores cargados. Agregá profesores primero.');
   _renderModalFormDisp();
@@ -5902,8 +5877,8 @@ function _buildProfCalendarLinks(prof) {
   if (!clases.length) return '';
 
   // Próximo lunes como referenci
+  const jsDay = hoy.getDay(); // a para los eventos
   const hoy = new Date(); // 0=Dom, 1=Lun, ..., 6=Sáb
-  const jsDay = hoy.getDay(); // referencia para los eventos
   const diasHastaLunes = ((1 - jsDay + 7) % 7) || 7;
   const lunesRef = new Date(hoy);
   lunesRef.setDate(hoy.getDate() + diasHastaLunes);
@@ -6125,7 +6100,7 @@ async function enviarEmailsSeleccionados() {
           .replace(/&/g,'&amp;').replace(/</g,'&lt;')
           .replace(/>/g,'&gt;')
           .replace(/\n/g,'<br>');
-        const linksHtml  = _buildCalendarLinksHtml(prof);
+        const linksHtml  = buildCalendarLinksHtml(prof);
         const htmlbody   = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#222;">'
           + cuerpoHtmlTexto + linksHtml + '</div>';
           try {
@@ -6156,6 +6131,8 @@ async function enviarEmailsSeleccionados() {
 })
 });
 if (!res.ok) throw new Error(await res.text());
+      // Con mode:'no-cors' la respuesta es opaca pero el POST llega al servidor GAS
+
       resultados.ok++;
     } catch (err) {
       resultados.errores.push(`${prof.apellido}, ${prof.nombre}: ${err.message}`);
@@ -6580,11 +6557,141 @@ function saveConfig() {
 }
 
 // ═══════════════════════════════════
+//  PLAN ENFORCEMENT (Opción A: lectura única al cargar)
+// ═══════════════════════════════════
+const SUPABASE_URL  = 'https://ictemkwmsqgktpxvvxjg.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_dD9nCSBl1xsl9rckxvfbMA_HmukQoBc';
+const LIMITES_TRIAL = { cursos: 5, profesores: 15 };
+
+const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Inicializa state.user con datos del plan leídos de Supabase.
+// Si no hay sesión → redirige a /login.
+// Si plan está vencido y no es 'paid' → banner + redirige a /planes.
+async function initPlan() {
+  const { data: { session } } = await _sb.auth.getSession();
+  if (!session) {
+    window.location.href = '/login';
+    return false;
+  }
+
+  const { data: escuela, error } = await _sb
+    .from('escuelas')
+    .select('id, nombre, plan, plan_inicio, plan_vence, trial_usado')
+    .eq('owner_id', session.user.id)
+    .maybeSingle();
+
+  if (error || !escuela) {
+    console.warn('No se pudo leer la escuela del usuario:', error);
+    // Fallback seguro: tratarlo como trial sin fecha (aplican límites)
+    state.user = {
+      id: session.user.id,
+      email: session.user.email,
+      plan: 'free',
+      plan_vence: null,
+      vencido: false,
+    };
+    renderBannerPlan();
+    return true;
+  }
+
+  const hoy = new Date();
+  const vence = escuela.plan_vence ? new Date(escuela.plan_vence) : null;
+  const vencido = vence ? (vence < hoy) : false;
+  const esPago = escuela.plan === 'paid';
+
+  state.user = {
+    id: session.user.id,
+    email: session.user.email,
+    escuelaId: escuela.id,
+    plan: escuela.plan || 'free',
+    plan_vence: escuela.plan_vence,
+    vencido: vencido && !esPago,
+  };
+
+  // Plan vencido y no es paid → banner + redirect
+  if (vencido && !esPago) {
+    mostrarBannerVencido();
+    setTimeout(() => { window.location.href = '/planes'; }, 2500);
+    return false;
+  }
+
+  renderBannerPlan();
+  return true;
+}
+
+// Banner según el estado del plan
+function renderBannerPlan() {
+  const u = state.user;
+  if (!u || u.plan === 'paid') return; // plan pago vigente → sin banner
+
+  const vence = u.plan_vence ? new Date(u.plan_vence) : null;
+  const hoy = new Date();
+  let diasRestantes = null;
+  if (vence) {
+    diasRestantes = Math.ceil((vence - hoy) / (1000 * 60 * 60 * 24));
+  }
+
+  const msg = diasRestantes !== null
+    ? `🎁 Plan de prueba — te quedan ${diasRestantes} día${diasRestantes === 1 ? '' : 's'} · Límites: ${LIMITES_TRIAL.cursos} cursos y ${LIMITES_TRIAL.profesores} profesores`
+    : `🎁 Plan de prueba — Límites: ${LIMITES_TRIAL.cursos} cursos y ${LIMITES_TRIAL.profesores} profesores`;
+
+  _pintarBanner(msg, '#FEF3C7', '#92400E', '/planes', 'Pasar a plan pago →');
+}
+
+function mostrarBannerVencido() {
+  _pintarBanner(
+    '⚠️ Tu plan venció. Redirigiéndote a la página de planes…',
+    '#FEE2E2', '#991B1B', null, null
+  );
+}
+
+function _pintarBanner(texto, bg, color, href, cta) {
+  let el = document.getElementById('planBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'planBanner';
+    el.style.cssText = 'position:sticky;top:0;z-index:200;padding:10px 18px;' +
+      'font-family:DM Sans,sans-serif;font-size:13px;font-weight:500;' +
+      'display:flex;align-items:center;justify-content:center;gap:14px;';
+    document.body.insertBefore(el, document.body.firstChild);
+  }
+  el.style.background = bg;
+  el.style.color = color;
+  el.innerHTML = `<span>${texto}</span>` +
+    (href && cta ? ` <a href="${href}" style="color:${color};text-decoration:underline;font-weight:600;">${cta}</a>` : '');
+}
+
+// Gate llamado desde saveCurso / saveProfesor antes de agregar
+// Devuelve true si se puede agregar, false si se bloquea (y avisa al usuario)
+function checkLimitePlan(tipo) {
+  const u = state.user;
+  if (!u) return true;              // sin datos de plan → no bloquear (fallback)
+  if (u.plan === 'paid') return true; // pago → sin límites
+
+  const actual = tipo === 'cursos' ? state.cursos.length : state.profesores.length;
+  const limite = LIMITES_TRIAL[tipo];
+
+  if (actual >= limite) {
+    alert(
+      `Límite del plan de prueba alcanzado: ${limite} ${tipo}.\n\n` +
+      `Para agregar más, pasate al plan pago desde /planes.`
+    );
+    return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════
 //  INIT
 // ═══════════════════════════════════
-loadLocal();
-renderDashboard();
-updateBadges();
+(async () => {
+  const ok = await initPlan();
+  if (!ok) return; // sin sesión o plan vencido: ya se redirigió
+  loadLocal();
+  renderDashboard();
+  updateBadges();
+})();
 
 // Guardar síncronamente antes de cerrar/recargar la pestaña
 window.addEventListener('beforeunload', () => {
