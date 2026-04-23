@@ -211,7 +211,9 @@ function LoginContent() {
               </button>
               <p style={{ fontSize: 12, color: "#4a5578", textAlign: "center", lineHeight: 1.6 }}>
                 Al registrarte aceptás nuestros{" "}
-                <span style={{ color: "#4f8ef7", cursor: "pointer" }}>Términos de uso</span>
+                <a href="/terminos" target="_blank" style={{ color: "#4f8ef7", textDecoration: "none" }}>
+                  Términos de uso
+                </a>
               </p>
             </form>
           )}
