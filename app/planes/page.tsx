@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -8,7 +8,20 @@ function PlanesContent() {
   const searchParams = useSearchParams();
   const motivo = searchParams.get("motivo");
   const pago   = searchParams.get("pago");
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [loadingPlan, setLoadingPlan]   = useState<string | null>(null);
+  const [tipoCambio, setTipoCambio]     = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("https://dolarapi.com/v1/dolares/oficial")
+      .then(r => r.json())
+      .then(d => setTipoCambio(d.venta))
+      .catch(() => setTipoCambio(null));
+  }, []);
+
+  function precioARS(usd: number): string {
+    if (!tipoCambio) return "...";
+    return new Intl.NumberFormat("es-AR").format(Math.round(usd * tipoCambio));
+  }
 
   async function handlePago(planId: string) {
     setLoadingPlan(planId);
@@ -27,8 +40,7 @@ function PlanesContent() {
 
       const data = await res.json();
       if (data.sandbox_init_point) {
-        window.location.href = data.sandbox_init_point; // sandbox
-        // En producción usar: data.init_point
+        window.location.href = data.sandbox_init_point;
       } else {
         alert("Error al iniciar el pago. Intentá de nuevo.");
       }
@@ -41,13 +53,7 @@ function PlanesContent() {
   }
 
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0c0f1a",
-      fontFamily: "'DM Sans', sans-serif",
-      color: "#e8eaf2",
-      padding: "24px",
-    }}>
+    <div style={{ minHeight: "100vh", background: "#0c0f1a", fontFamily: "'DM Sans', sans-serif", color: "#e8eaf2", padding: "24px" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -65,6 +71,7 @@ function PlanesContent() {
         .price-option { background: rgba(255,255,255,.04); border: 1px solid #1e2642; border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
         .price-option:last-child { margin-bottom: 0; }
         .plan-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
+        .ars-equiv { font-size: 12px; color: #4a5578; margin-top: 3px; }
         @media (max-width: 768px) { .plans-grid { grid-template-columns: 1fr !important; } }
       `}</style>
 
@@ -81,36 +88,38 @@ function PlanesContent() {
             ⏰ Tu período de acceso venció. Elegí un plan para seguir usando Puntual.
           </div>
         )}
-
         {pago === "exitoso" && (
           <div style={{ background: "rgba(79,247,168,.12)", border: "1px solid rgba(79,247,168,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#4ff7a8", textAlign: "center" }}>
-            🎉 ¡Pago recibido! Tu plan se activará en unos segundos. Podés ingresar a la app.
-            <br />
-            <a href="/horario-escolar-14.html" style={{ color: "#4ff7a8", fontWeight: 700, marginTop: 8, display: "inline-block" }}>
-              Ir a la app →
-            </a>
+            🎉 ¡Pago recibido! Tu plan se activará en unos segundos.{" "}
+            <a href="/horario-escolar-14.html" style={{ color: "#4ff7a8", fontWeight: 700 }}>Ir a la app →</a>
           </div>
         )}
-
         {pago === "fallido" && (
           <div style={{ background: "rgba(247,79,106,.12)", border: "1px solid rgba(247,79,106,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#f74f6a", textAlign: "center" }}>
             ❌ El pago no se pudo completar. Podés intentarlo de nuevo.
           </div>
         )}
-
         {pago === "pendiente" && (
           <div style={{ background: "rgba(255,193,7,.12)", border: "1px solid rgba(255,193,7,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#ffc107", textAlign: "center" }}>
             ⏳ Tu pago está siendo procesado. Te avisaremos por email cuando se confirme.
           </div>
         )}
 
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
           <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "clamp(28px, 5vw, 44px)", marginBottom: 14 }}>
             Elegí el plan de tu institución
           </h1>
           <p style={{ fontSize: 16, color: "#8892b0" }}>
             Todos los planes incluyen generación automática y soporte por mail.
           </p>
+        </div>
+
+        {/* Aviso tipo de cambio */}
+        <div style={{ textAlign: "center", marginBottom: 36 }}>
+          <span style={{ fontSize: 13, color: "#4a5578", background: "rgba(255,255,255,.04)", border: "1px solid #1e2642", borderRadius: 8, padding: "6px 14px", display: "inline-block" }}>
+            💵 Precios en USD · Se cobran en pesos al tipo de cambio oficial del día
+            {tipoCambio && <span style={{ color: "#8892b0", marginLeft: 6 }}>(hoy: ${new Intl.NumberFormat("es-AR").format(tipoCambio)} ARS)</span>}
+          </span>
         </div>
 
         <div className="plans-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, alignItems: "start" }}>
@@ -146,17 +155,19 @@ function PlanesContent() {
               <p style={{ fontSize: 13, color: "#8892b0", lineHeight: 1.6, marginBottom: 16 }}>Para escuelas en crecimiento. Hasta 12 cursos, docentes ilimitados.</p>
               <div className="price-option">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>$199</span>
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 199</span>
                   <span style={{ fontSize: 13, color: "#4a5578" }}>/ 1 mes</span>
                 </div>
+                <div className="ars-equiv">≈ ${precioARS(199)} ARS</div>
               </div>
               <div className="price-option">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>$299</span>
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 299</span>
                   <span style={{ fontSize: 13, color: "#4a5578" }}>/ 2 meses</span>
                 </div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 10px", marginTop: 4 }}>
-                  🎉 Ahorrás $99
+                <div className="ars-equiv">≈ ${precioARS(299)} ARS</div>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 10px", marginTop: 6 }}>
+                  🎉 Ahorrás USD 99
                 </div>
               </div>
             </div>
@@ -167,10 +178,10 @@ function PlanesContent() {
             </ul>
             <div className="plan-buttons">
               <button className="btn-primary" disabled={!!loadingPlan} onClick={() => handlePago("estandar-1mes")}>
-                {loadingPlan === "estandar-1mes" ? "Redirigiendo..." : "Pagar 1 mes ($199) →"}
+                {loadingPlan === "estandar-1mes" ? "Redirigiendo..." : "Pagar 1 mes (USD 199) →"}
               </button>
               <button className="btn-outline" disabled={!!loadingPlan} onClick={() => handlePago("estandar-2meses")}>
-                {loadingPlan === "estandar-2meses" ? "Redirigiendo..." : "Pagar 2 meses ($299) →"}
+                {loadingPlan === "estandar-2meses" ? "Redirigiendo..." : "Pagar 2 meses (USD 299) →"}
               </button>
             </div>
           </div>
@@ -182,17 +193,19 @@ function PlanesContent() {
               <p style={{ fontSize: 13, color: "#8892b0", lineHeight: 1.6, marginBottom: 16 }}>Sin límites de cursos ni docentes. Para instituciones de cualquier tamaño.</p>
               <div className="price-option">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>$299</span>
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 299</span>
                   <span style={{ fontSize: 13, color: "#4a5578" }}>/ 1 mes</span>
                 </div>
+                <div className="ars-equiv">≈ ${precioARS(299)} ARS</div>
               </div>
               <div className="price-option">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>$400</span>
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 400</span>
                   <span style={{ fontSize: 13, color: "#4a5578" }}>/ 2 meses</span>
                 </div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 10px", marginTop: 4 }}>
-                  🎉 Ahorrás $198
+                <div className="ars-equiv">≈ ${precioARS(400)} ARS</div>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 10px", marginTop: 6 }}>
+                  🎉 Ahorrás USD 198
                 </div>
               </div>
             </div>
@@ -203,10 +216,10 @@ function PlanesContent() {
             </ul>
             <div className="plan-buttons">
               <button className="btn-primary" disabled={!!loadingPlan} onClick={() => handlePago("completo-1mes")}>
-                {loadingPlan === "completo-1mes" ? "Redirigiendo..." : "Pagar 1 mes ($299) →"}
+                {loadingPlan === "completo-1mes" ? "Redirigiendo..." : "Pagar 1 mes (USD 299) →"}
               </button>
               <button className="btn-outline" disabled={!!loadingPlan} onClick={() => handlePago("completo-2meses")}>
-                {loadingPlan === "completo-2meses" ? "Redirigiendo..." : "Pagar 2 meses ($400) →"}
+                {loadingPlan === "completo-2meses" ? "Redirigiendo..." : "Pagar 2 meses (USD 400) →"}
               </button>
             </div>
           </div>
