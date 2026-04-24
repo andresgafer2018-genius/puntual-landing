@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN!;
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const SUPABASE_URL = "https://ictemkwmsqgktpxvvxjg.supabase.co";
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // MP envía diferentes tipos de notificaciones
     if (body.type !== "payment") {
       return NextResponse.json({ received: true });
     }
@@ -21,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // Consultar el pago a MP para verificar estado y metadata
+    // Verificar el pago con MP
     const mpRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
       headers: { Authorization: `Bearer ${MP_ACCESS_TOKEN}` },
     });
@@ -40,24 +36,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // Calcular nueva fecha de vencimiento desde hoy
-    const ahora      = new Date();
-    const planInicio = ahora.toISOString();
-    const planVence  = new Date(ahora);
+    // Calcular fechas
+    const ahora     = new Date();
+    const planVence = new Date(ahora);
     planVence.setMonth(planVence.getMonth() + Number(meses));
 
-    const { error } = await supabase
-      .from("escuelas")
-      .update({
-        plan: planKey,
-        plan_inicio: planInicio,
-        plan_vence: planVence.toISOString(),
-        mp_payment_id: String(paymentId),
-      })
-      .eq("owner_id", userId);
+    // Actualizar Supabase via REST API directamente
+    const sbRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/escuelas?owner_id=eq.${userId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_SERVICE_KEY,
+          "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+          "Prefer": "return=minimal",
+        },
+        body: JSON.stringify({
+          plan: planKey,
+          plan_inicio: ahora.toISOString(),
+          plan_vence: planVence.toISOString(),
+          mp_payment_id: String(paymentId),
+        }),
+      }
+    );
 
-    if (error) {
-      console.error("Supabase update error:", error);
+    if (!sbRes.ok) {
+      const err = await sbRes.text();
+      console.error("Supabase error:", err);
       return NextResponse.json({ error: "DB error" }, { status: 500 });
     }
 
@@ -70,7 +76,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// MP también hace GET para verificar el endpoint
 export async function GET() {
   return NextResponse.json({ ok: true });
 }
