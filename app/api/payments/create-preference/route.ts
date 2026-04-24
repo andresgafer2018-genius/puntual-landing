@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN!;
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 const PLANES: Record<string, { title: string; price: number; plan_key: string; meses: number }> = {
-  "estandar-1mes":  { title: "Plan Estándar 1 mes",  price: 199, plan_key: "estandar", meses: 1 },
-  "estandar-2meses":{ title: "Plan Estándar 2 meses", price: 299, plan_key: "estandar", meses: 2 },
-  "completo-1mes":  { title: "Plan Completo 1 mes",   price: 299, plan_key: "completo", meses: 1 },
-  "completo-2meses":{ title: "Plan Completo 2 meses", price: 400, plan_key: "completo", meses: 2 },
+  "estandar-1mes":   { title: "Plan Estándar 1 mes",   price: 199, plan_key: "estandar", meses: 1 },
+  "estandar-2meses": { title: "Plan Estándar 2 meses", price: 299, plan_key: "estandar", meses: 2 },
+  "completo-1mes":   { title: "Plan Completo 1 mes",   price: 299, plan_key: "completo", meses: 1 },
+  "completo-2meses": { title: "Plan Completo 2 meses", price: 400, plan_key: "completo", meses: 2 },
 };
 
 export async function POST(req: NextRequest) {
@@ -67,7 +62,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Error creando preferencia" }, { status: 500 });
     }
 
-    return NextResponse.json({ init_point: data.init_point, sandbox_init_point: data.sandbox_init_point });
+    return NextResponse.json({
+      init_point: data.init_point,
+      sandbox_init_point: data.sandbox_init_point,
+    });
+
   } catch (err) {
     console.error("create-preference error:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
