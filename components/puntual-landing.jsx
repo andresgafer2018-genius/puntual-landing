@@ -441,7 +441,7 @@ export default function PuntualLanding() {
       {/* FOOTER */}
       <footer style={{ background: "#090b14", borderTop: "1px solid #1a2040", padding: "32px 24px" }}>
         <div style={{ maxWidth: 1120, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-          <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, color: "#4f8ef7" }}>Puntual<span style={{ color: "#f7854f" }}>.</span></span>
+          <span onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ fontFamily: "'DM Serif Display', serif", fontSize: 18, color: "#4f8ef7", cursor: "pointer" }}>Puntual<span style={{ color: "#f7854f" }}>.</span></span>
           <p style={{ fontSize: 13, color: "#2a3050" }}>© 2025 Puntual · Hecho con ♥ en Argentina</p>
           <div style={{ display: "flex", gap: 24 }}>
             {Object.entries(FOOTER_LINKS).map(([label, href]) => (
