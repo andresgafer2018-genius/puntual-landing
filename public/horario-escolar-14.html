@@ -6623,7 +6623,8 @@ async function initPlan() {
 // Banner según el estado del plan
 function renderBannerPlan() {
   const u = state.user;
-  if (!u || u.plan === 'paid') return; // plan pago vigente → sin banner
+  if (!u) return;
+if (u.plan === 'paid' && !u.vencido) return; // paid vigente → sin banner
 
   const vence = u.plan_vence ? new Date(u.plan_vence) : null;
   const hoy = new Date();
