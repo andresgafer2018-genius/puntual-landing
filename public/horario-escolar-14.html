@@ -4642,11 +4642,11 @@ function renderDashboard() {
 
   // ── Alertas ───────────────────────────────────────────────────────────────
   const alerts = [];
-  alerts.push({type:'info', msg:'1. Empezá configurando tu escuela desde el botón Config.'});
-alerts.push({type:'info', msg:'2. Agregá las materias que se dictan en la escuela.'});
-alerts.push({type:'info', msg:'3. Agregá los profesores asignándoles las materias que dictan.'});
-alerts.push({type:'info', msg:'4. Importá o cargá manualmente la disponibilidad horaria de cada profesor.'});
-alerts.push({type:'info', msg:'5. Configurá los cursos (año + división).'});
+  alerts.push({type:'info', msg:' Empezá configurando tu escuela desde el botón Config.'});
+alerts.push({type:'info', msg:' Agregá las materias que se dictan en la escuela.'});
+alerts.push({type:'info', msg:' Agregá los profesores asignándoles las materias que dictan.'});
+alerts.push({type:'info', msg:' Importá o cargá manualmente la disponibilidad horaria de cada profesor.'});
+alerts.push({type:'info', msg:' Configurá los cursos (año + división).'});
   if (state.profesores.length && state.materias.length && state.cursos.length && !state.horario.length)
     alerts.push({type:'warn', msg:'Ya podés generar el horario automáticamente con el botón "Auto-Generar".'});
   if (conflicts > 0)
