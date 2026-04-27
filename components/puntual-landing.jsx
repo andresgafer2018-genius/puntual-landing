@@ -25,22 +25,22 @@ const STEPS = [
 
 const PLANS = [
   {
-    name: "Prueba gratuita", price: "$0", period: "15 días · Solo una vez",
+    name: "Prueba gratuita", usd: null, period: "15 días · Solo una vez",
     desc: "Para conocer la plataforma antes de comprometerte.",
     features: ["15 días de acceso completo", "Hasta 5 cursos", "Hasta 15 docentes", "Generación automática", "Exportación PDF y Excel"],
-    cta: "Empezar gratis", highlight: false, badge: null,
+    cta: "Empezar gratis", highlight: false,
   },
   {
-    name: "Plan Estándar", price: "$99", period: "/ mes",
+    name: "Plan Estándar", usd: 99, period: "/ mes",
     desc: "Hasta 12 cursos, docentes ilimitados.",
     features: ["Hasta 12 cursos", "Docentes ilimitados", "Generación automática", "Exportación PDF y Excel", "Soporte prioritario", "Actualizaciones incluidas"],
-    cta: "Contratar plan estándar →", highlight: true, badge: null,
+    cta: "Contratar plan estándar →", highlight: true,
   },
   {
-    name: "Plan Completo", price: "$119", period: "/ mes",
+    name: "Plan Completo", usd: 119, period: "/ mes",
     desc: "Sin límites de cursos ni docentes.",
     features: ["Cursos ilimitados", "Docentes ilimitados", "Generación automática", "Exportación PDF y Excel", "Soporte prioritario", "Actualizaciones incluidas"],
-    cta: "Contratar plan completo →", highlight: false, badge: null,
+    cta: "Contratar plan completo →", highlight: false,
   },
 ];
 
@@ -74,7 +74,20 @@ export default function PuntualLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [tipoCambio, setTipoCambio] = useState(null);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch("https://dolarapi.com/v1/dolares/oficial")
+      .then(r => r.json())
+      .then(d => setTipoCambio(d.venta))
+      .catch(() => setTipoCambio(null));
+  }, []);
+
+  function precioARS(usd) {
+    if (!tipoCambio) return "...";
+    return new Intl.NumberFormat("es-AR").format(Math.round(usd * tipoCambio));
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -353,12 +366,16 @@ export default function PuntualLanding() {
                     <div style={{ position: "absolute", top: -13, left: "50%", transform: "translateX(-50%)", background: "#4f8ef7", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 16px", borderRadius: 100, whiteSpace: "nowrap" }}>MÁS ELEGIDO</div>
                   )}
                   <h3 style={{ fontSize: 15, fontWeight: 700, color: "#8892b0", marginBottom: 12 }}>{p.name}</h3>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
-                    <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 40, color: "#e8eaf2" }}>{p.price}</span>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 40, color: "#e8eaf2" }}>
+                      {p.usd ? `USD ${p.usd}` : "$0"}
+                    </span>
                     {p.period && <span style={{ fontSize: 13, color: "#4a5578" }}>{p.period}</span>}
                   </div>
-                  {p.badge && (
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 12, fontWeight: 700, padding: "4px 12px", marginBottom: 12 }}>{p.badge}</div>
+                  {p.usd && (
+                    <p style={{ fontSize: 12, color: "#4a5578", marginBottom: 6 }}>
+                      ≈ ${precioARS(p.usd)} ARS · se cobra al tipo de cambio del día
+                    </p>
                   )}
                   <p style={{ fontSize: 13, color: "#4a5578", marginBottom: 24 }}>{p.desc}</p>
                   <ul style={{ listStyle: "none", marginBottom: 28 }}>
