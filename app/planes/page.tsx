@@ -155,20 +155,10 @@ function PlanesContent() {
               <p style={{ fontSize: 13, color: "#8892b0", lineHeight: 1.6, marginBottom: 16 }}>Para escuelas en crecimiento. Hasta 12 cursos, docentes ilimitados.</p>
               <div className="price-option">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 199</span>
-                  <span style={{ fontSize: 13, color: "#4a5578" }}>/ 1 mes</span>
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 99</span>
+                  <span style={{ fontSize: 13, color: "#4a5578" }}>/ mes</span>
                 </div>
-                <div className="ars-equiv">≈ ${precioARS(199)} ARS</div>
-              </div>
-              <div className="price-option">
-                <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 299</span>
-                  <span style={{ fontSize: 13, color: "#4a5578" }}>/ 2 meses</span>
-                </div>
-                <div className="ars-equiv">≈ ${precioARS(299)} ARS</div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 10px", marginTop: 6 }}>
-                  🎉 Ahorrás USD 99
-                </div>
+                <div className="ars-equiv">≈ ${precioARS(99)} ARS</div>
               </div>
             </div>
             <ul style={{ listStyle: "none", marginBottom: 28, flex: 1 }}>
@@ -178,10 +168,7 @@ function PlanesContent() {
             </ul>
             <div className="plan-buttons">
               <button className="btn-primary" disabled={!!loadingPlan} onClick={() => handlePago("estandar-1mes")}>
-                {loadingPlan === "estandar-1mes" ? "Redirigiendo..." : "Pagar 1 mes (USD 199) →"}
-              </button>
-              <button className="btn-outline" disabled={!!loadingPlan} onClick={() => handlePago("estandar-2meses")}>
-                {loadingPlan === "estandar-2meses" ? "Redirigiendo..." : "Pagar 2 meses (USD 299) →"}
+                {loadingPlan === "estandar-1mes" ? "Redirigiendo..." : "Contratar plan estándar →"}
               </button>
             </div>
           </div>
@@ -193,20 +180,10 @@ function PlanesContent() {
               <p style={{ fontSize: 13, color: "#8892b0", lineHeight: 1.6, marginBottom: 16 }}>Sin límites de cursos ni docentes. Para instituciones de cualquier tamaño.</p>
               <div className="price-option">
                 <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 299</span>
-                  <span style={{ fontSize: 13, color: "#4a5578" }}>/ 1 mes</span>
+                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 119</span>
+                  <span style={{ fontSize: 13, color: "#4a5578" }}>/ mes</span>
                 </div>
-                <div className="ars-equiv">≈ ${precioARS(299)} ARS</div>
-              </div>
-              <div className="price-option">
-                <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-                  <span style={{ fontFamily: "'DM Serif Display', serif", fontSize: 36, color: "#e8eaf2" }}>USD 400</span>
-                  <span style={{ fontSize: 13, color: "#4a5578" }}>/ 2 meses</span>
-                </div>
-                <div className="ars-equiv">≈ ${precioARS(400)} ARS</div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(79,247,168,.12)", color: "#4ff7a8", border: "1px solid rgba(79,247,168,.25)", borderRadius: 100, fontSize: 11, fontWeight: 700, padding: "3px 10px", marginTop: 6 }}>
-                  🎉 Ahorrás USD 198
-                </div>
+                <div className="ars-equiv">≈ ${precioARS(119)} ARS</div>
               </div>
             </div>
             <ul style={{ listStyle: "none", marginBottom: 28, flex: 1 }}>
@@ -216,10 +193,7 @@ function PlanesContent() {
             </ul>
             <div className="plan-buttons">
               <button className="btn-primary" disabled={!!loadingPlan} onClick={() => handlePago("completo-1mes")}>
-                {loadingPlan === "completo-1mes" ? "Redirigiendo..." : "Pagar 1 mes (USD 299) →"}
-              </button>
-              <button className="btn-outline" disabled={!!loadingPlan} onClick={() => handlePago("completo-2meses")}>
-                {loadingPlan === "completo-2meses" ? "Redirigiendo..." : "Pagar 2 meses (USD 400) →"}
+                {loadingPlan === "completo-1mes" ? "Redirigiendo..." : "Contratar plan completo →"}
               </button>
             </div>
           </div>
