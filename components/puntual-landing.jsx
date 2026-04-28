@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-
+import PuntualWidget from "@/components/PuntualWidget";
 const DEMO_VIDEO_URL = null;
 
 const NAV_LINKS = ["Funciones", "Cómo funciona", "Precios", "Contacto"];
@@ -458,6 +458,9 @@ export default function PuntualLanding() {
           </div>
         </div>
       </footer>
+      <PuntualWidget />
+    </div>
+  );
     </div>
   );
 }
