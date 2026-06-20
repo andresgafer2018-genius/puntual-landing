@@ -461,6 +461,4 @@ export default function PuntualLanding() {
       <PuntualWidget />
     </div>
   );
-    </div>
-  );
 }
