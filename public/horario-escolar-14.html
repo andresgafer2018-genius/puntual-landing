@@ -6569,6 +6569,9 @@ const SUPABASE_URL  = 'https://ictemkwmsqgktpxvvxjg.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_dD9nCSBl1xsl9rckxvfbMA_HmukQoBc';
 const LIMITES_TRIAL = { cursos: 5, profesores: 15 };
 
+// Emails con acceso total de administrador (sin limites, sin vencimiento)
+const ADMIN_EMAILS = ['andresgafer2018@gmail.com']; // todo en minuscula
+
 const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // Inicializa state.user con datos del plan leídos de Supabase.
@@ -6579,6 +6582,22 @@ async function initPlan() {
   if (!session) {
     window.location.href = '/login';
     return false;
+  }
+
+  // -- Modo administrador: acceso total, sin tocar la tabla escuelas --
+  const _email = (session.user.email || '').toLowerCase();
+  if (ADMIN_EMAILS.includes(_email)) {
+    state.user = {
+      id: session.user.id,
+      email: session.user.email,
+      plan: 'admin',
+      esAdmin: true,
+      plan_vence: null,
+      vencido: false,
+    };
+    _pintarBanner('🛠️ Modo administrador — acceso total, sin limites',
+      '#DBEAFE', '#1E40AF', null, null);
+    return true;
   }
 
   const { data: escuela, error } = await _sb
@@ -6674,6 +6693,7 @@ function _pintarBanner(texto, bg, color, href, cta) {
 function checkLimitePlan(tipo) {
   const u = state.user;
   if (!u) return true;              // sin datos de plan → no bloquear (fallback)
+  if (u.esAdmin || u.plan === 'admin') return true; // admin → sin límites
   if (u.plan === 'paid') return true; // pago → sin límites
 
   const actual = tipo === 'cursos' ? state.cursos.length : state.profesores.length;
