@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(request) {
   try {
@@ -8,8 +8,6 @@ export async function POST(request) {
     if (!nombre) {
       return NextResponse.json({ error: "Nombre requerido" }, { status: 400 });
     }
-
-    const supabase = createClient();
 
     const { error } = await supabase.from("leads").insert([
       {
