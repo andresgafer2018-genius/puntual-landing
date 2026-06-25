@@ -462,6 +462,9 @@ tr:hover td { background:rgba(79,142,247,.04); }
       <div class="sidebar-label">Acciones</div>
       <div class="nav-item" onclick="autoGenerar()"><span class="icon">⚡</span>Auto-Generar</div>
       <div class="nav-item" onclick="exportarJSON()"><span class="icon">💾</span>Exportar</div>
+      <div class="nav-item" onclick="exportarProfesores()"><span class="icon">👨‍🏫</span>Exportar profesores</div>
+      <div class="nav-item" onclick="exportarMaterias()"><span class="icon">📚</span>Exportar materias</div>
+      <div class="nav-item" onclick="exportarCargaHoraria()"><span class="icon">🕒</span>Exportar carga horaria</div>
       <div class="nav-item" onclick="importarJSON()"><span class="icon">📂</span>Importar</div>
       <div class="nav-item" onclick="resetApp()"><span class="icon">🔄</span>Reiniciar</div>
       <div class="nav-item" onclick="cerrarSesion()" style="color:#f74f6a;margin-top:8px;"><span class="icon">🚪</span>Cerrar sesión</div>
@@ -6300,6 +6303,38 @@ function exportarJSON() {
   const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='horario-escolar.json'; a.click();
+}
+
+// ── Exportaciones por separado en JSON (solo admin) ──────────────────
+// Cada archivo se puede volver a importar con el botón "Importar":
+// handleImport hace Object.assign(state, d), así que reemplaza solo
+// la parte exportada (profesores, materias o cursos) sin tocar el resto.
+function _soloAdmin() {
+  const u = state.user;
+  if (u && (u.esAdmin || u.plan === 'admin')) return true;
+  alert('⚠️ La exportación de datos está disponible solo en modo administrador.');
+  return false;
+}
+function _descargarJSON(nombre, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = nombre; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function exportarProfesores() {
+  if (!_soloAdmin()) return;
+  if (!state.profesores.length) return alert('No hay profesores cargados.');
+  _descargarJSON('puntual-profesores.json', { profesores: state.profesores });
+}
+function exportarMaterias() {
+  if (!_soloAdmin()) return;
+  if (!state.materias.length) return alert('No hay materias cargadas.');
+  _descargarJSON('puntual-materias.json', { materias: state.materias });
+}
+function exportarCargaHoraria() {
+  if (!_soloAdmin()) return;
+  if (!state.cursos.length) return alert('No hay cursos cargados.');
+  _descargarJSON('puntual-carga-horaria.json', { cursos: state.cursos });
 }
 
 function importarJSON() { document.getElementById('importFile').click(); }
