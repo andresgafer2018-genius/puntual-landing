@@ -465,6 +465,7 @@ tr:hover td { background:rgba(79,142,247,.04); }
       <div class="nav-item" onclick="exportarProfesores()"><span class="icon">👨‍🏫</span>Exportar profesores</div>
       <div class="nav-item" onclick="exportarMaterias()"><span class="icon">📚</span>Exportar materias</div>
       <div class="nav-item" onclick="exportarCargaHoraria()"><span class="icon">🕒</span>Exportar carga horaria</div>
+      <div class="nav-item" onclick="exportarConfig()"><span class="icon">⚙️</span>Exportar configuración</div>
       <div class="nav-item" onclick="importarJSON()"><span class="icon">📂</span>Importar</div>
       <div class="nav-item" onclick="resetApp()"><span class="icon">🔄</span>Reiniciar</div>
       <div class="nav-item" onclick="cerrarSesion()" style="color:#f74f6a;margin-top:8px;"><span class="icon">🚪</span>Cerrar sesión</div>
@@ -6335,6 +6336,11 @@ function exportarCargaHoraria() {
   if (!_soloAdmin()) return;
   if (!state.cursos.length) return alert('No hay cursos cargados.');
   _descargarJSON('puntual-carga-horaria.json', { cursos: state.cursos });
+}
+function exportarConfig() {
+  if (!_soloAdmin()) return;
+  if (!state.config) return alert('No hay configuración cargada.');
+  _descargarJSON('puntual-config.json', { config: state.config });
 }
 
 function importarJSON() { document.getElementById('importFile').click(); }
