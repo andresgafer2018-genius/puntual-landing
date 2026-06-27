@@ -3927,6 +3927,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // renderice el overlay antes de que el hilo JS quede bloqueado con el cálculo.
   _mostrarOverlayCarga(true);
   setTimeout(() => {
+  try {
 
   const MODULOS = getModulos();
   const DIAS = getDias();
@@ -4437,6 +4438,17 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
 
     _mostrarPromptGuardar(ok, fail);
   }, 100);
+
+  } catch (err) {
+    console.error('❌ Error en autoGenerar:', err);
+    alert(
+      '❌ Ocurrió un error al generar el horario:\n\n' +
+      (err && err.message ? err.message : String(err)) +
+      '\n\nAbrí la consola (F12 → pestaña Console) para ver el detalle completo y pasámelo.'
+    );
+  } finally {
+    _mostrarOverlayCarga(false);
+  }
 
   }, 60); // ← cierre del setTimeout que permite renderizar el overlay
 }
