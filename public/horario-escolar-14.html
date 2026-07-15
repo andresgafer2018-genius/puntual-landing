@@ -1814,38 +1814,105 @@ function saveSlot() {
 
 // ── Helpers internos del scheduler ──────────────────────────────────────
 
+// ── Índice O(1) de ocupación (Sets/Maps) ─────────────────────────────────
+// Optimización de rendimiento: las funciones de abajo aceptan un parámetro
+// `idx` OPCIONAL al final. Si se pasa, usan Maps para chequeos O(1) en vez
+// de recorrer el array `horario` con .some()/.filter() (O(n)). Si NO se pasa
+// (idx omitido o null), el comportamiento es IDÉNTICO al original: se sigue
+// escaneando el array. Esto permite que _pasadaAsignacion (la función que
+// corre ~80 veces por generación) sea O(1) por chequeo sin tocar el resto
+// de las fases (swaps, backtracking, recocido simulado), que siguen usando
+// el path original sin idx y por lo tanto no cambian su comportamiento.
+//
+// Estructura del índice:
+//   idx.curso      Map "cursoId|dia|modulo" -> entrada
+//   idx.prof       Map "profId|dia|modulo"  -> entrada
+//   idx.profCount  Map profId -> cantidad de horas asignadas
+//   idx.profDia    Map "profId|dia" -> Set(modulos) [para compacidad/consecutivas]
+//   idx.cursoMat   Map "cursoId|matId" -> cantidad asignada
+function _crearIndice(horario) {
+  const idx = {
+    curso: new Map(),
+    prof: new Map(),
+    profCount: new Map(),
+    profDia: new Map(),
+    cursoMat: new Map()
+  };
+  for (const h of horario) _indiceAgregar(idx, h);
+  return idx;
+}
+function _indiceAgregar(idx, h) {
+  idx.curso.set(`${h.cursoId}|${h.dia}|${h.modulo}`, h);
+  idx.prof.set(`${h.profesorId}|${h.dia}|${h.modulo}`, h);
+  idx.profCount.set(h.profesorId, (idx.profCount.get(h.profesorId) || 0) + 1);
+  const kPD = `${h.profesorId}|${h.dia}`;
+  if (!idx.profDia.has(kPD)) idx.profDia.set(kPD, new Set());
+  idx.profDia.get(kPD).add(h.modulo);
+  const kCM = `${h.cursoId}|${h.materiaId}`;
+  idx.cursoMat.set(kCM, (idx.cursoMat.get(kCM) || 0) + 1);
+}
+function _indiceQuitar(idx, h) {
+  idx.curso.delete(`${h.cursoId}|${h.dia}|${h.modulo}`);
+  idx.prof.delete(`${h.profesorId}|${h.dia}|${h.modulo}`);
+  idx.profCount.set(h.profesorId, Math.max(0, (idx.profCount.get(h.profesorId) || 1) - 1));
+  const kPD = `${h.profesorId}|${h.dia}`;
+  const s = idx.profDia.get(kPD);
+  if (s) { s.delete(h.modulo); if (!s.size) idx.profDia.delete(kPD); }
+  const kCM = `${h.cursoId}|${h.materiaId}`;
+  idx.cursoMat.set(kCM, Math.max(0, (idx.cursoMat.get(kCM) || 1) - 1));
+}
+/** Agrega una entrada al horario Y al índice (si se pasa idx) de forma sincronizada */
+function _pushEntrada(horario, idx, entrada) {
+  horario.push(entrada);
+  if (idx) _indiceAgregar(idx, entrada);
+  return entrada;
+}
+/** Quita la última entrada del horario Y del índice (si se pasa idx) de forma sincronizada */
+function _popEntrada(horario, idx) {
+  const e = horario.pop();
+  if (e && idx) _indiceQuitar(idx, e);
+  return e;
+}
+
 /** Devuelve true si el profesor está disponible y libre en ese slot */
-function _profDisponible(prof, dia, modulo, horarioActual, ignorarMaxHs = false) {
+function _profDisponible(prof, dia, modulo, horarioActual, ignorarMaxHs = false, idx = null) {
   const avail = prof.disponibilidad || defaultAvail();
   if (modulo >= avail.length || dia >= (avail[modulo] || []).length) return false;
   if (!avail[modulo][dia]) return false;
-  if (horarioActual.some(h => h.profesorId === prof.id && h.dia === dia && h.modulo === modulo)) return false;
+  if (idx) {
+    if (idx.prof.has(`${prof.id}|${dia}|${modulo}`)) return false;
+  } else if (horarioActual.some(h => h.profesorId === prof.id && h.dia === dia && h.modulo === modulo)) return false;
   if (!ignorarMaxHs) {
-    const hsAsig = horarioActual.filter(h => h.profesorId === prof.id).length;
+    const hsAsig = idx ? (idx.profCount.get(prof.id) || 0) : horarioActual.filter(h => h.profesorId === prof.id).length;
     if (hsAsig >= prof.maxHs) return false;
   }
   return true;
 }
 
 /** Diagnóstico: razón por la que un prof no puede en ese slot */
-function _razonBloqueo(prof, dia, modulo, horarioActual) {
+function _razonBloqueo(prof, dia, modulo, horarioActual, idx = null) {
   const avail = prof.disponibilidad || defaultAvail();
   if (modulo >= avail.length || dia >= (avail[modulo] || []).length || !avail[modulo][dia])
     return 'disponibilidad';
-  if (horarioActual.some(h => h.profesorId === prof.id && h.dia === dia && h.modulo === modulo))
-    return 'ocupado';
-  const hsAsig = horarioActual.filter(h => h.profesorId === prof.id).length;
+  const ocupado = idx
+    ? idx.prof.has(`${prof.id}|${dia}|${modulo}`)
+    : horarioActual.some(h => h.profesorId === prof.id && h.dia === dia && h.modulo === modulo);
+  if (ocupado) return 'ocupado';
+  const hsAsig = idx ? (idx.profCount.get(prof.id) || 0) : horarioActual.filter(h => h.profesorId === prof.id).length;
   if (hsAsig >= prof.maxHs) return 'maxHs';
   return null;
 }
 
 /** Cuenta cuántos slots posibles tiene un profesor para un curso concreto */
-function _contarSlotsPosibles(prof, cursoId, horarioActual, MODULOS, DIAS) {
+function _contarSlotsPosibles(prof, cursoId, horarioActual, MODULOS, DIAS, idx = null) {
   let count = 0;
   for (let m = 0; m < MODULOS.length; m++) {
     for (let d = 0; d < DIAS.length; d++) {
-      if (horarioActual.some(h => h.cursoId === cursoId && h.dia === d && h.modulo === m)) continue;
-      if (_profDisponible(prof, d, m, horarioActual)) count++;
+      const ocupadoCurso = idx
+        ? idx.curso.has(`${cursoId}|${d}|${m}`)
+        : horarioActual.some(h => h.cursoId === cursoId && h.dia === d && h.modulo === m);
+      if (ocupadoCurso) continue;
+      if (_profDisponible(prof, d, m, horarioActual, false, idx)) count++;
     }
   }
   return count;
@@ -2717,24 +2784,24 @@ let _permitirMasDeConsecutivas = false;
 
 // Devuelve cuántas clases seguidas tendría el prof en el día d si se lo ubica en módulo m.
 // Cuenta el bloque contiguo (hacia arriba y hacia abajo) que se formaría.
-function _bloqueConsecutivo(profId, dia, modulo, horario) {
-  const modulosHoy = horario
-    .filter(h => h.profesorId === profId && h.dia === dia)
-    .map(h => h.modulo);
+function _bloqueConsecutivo(profId, dia, modulo, horario, idx = null) {
+  const modulosHoySet = idx ? idx.profDia.get(`${profId}|${dia}`) : null;
+  const tieneModulo = m => idx ? (modulosHoySet ? modulosHoySet.has(m) : false)
+    : horario.some(h => h.profesorId === profId && h.dia === dia && h.modulo === m);
   let runLen = 1;
   let m = modulo - 1;
-  while (modulosHoy.includes(m)) { runLen++; m--; }
+  while (tieneModulo(m)) { runLen++; m--; }
   m = modulo + 1;
-  while (modulosHoy.includes(m)) { runLen++; m++; }
+  while (tieneModulo(m)) { runLen++; m++; }
   return runLen;
 }
 
 // Restricción DURA de horas consecutivas.
 // Devuelve false si colocar al prof en (dia, modulo) crearía un bloque de 3+
 // clases seguidas Y la restricción está activa (_permitirMasDeConsecutivas=false).
-function _puedePonerProf(profId, dia, modulo, horario) {
+function _puedePonerProf(profId, dia, modulo, horario, idx = null) {
   if (_permitirMasDeConsecutivas) return true;
-  return _bloqueConsecutivo(profId, dia, modulo, horario) < 3;
+  return _bloqueConsecutivo(profId, dia, modulo, horario, idx) < 3;
 }
 
 // ── Función de costo/fitness para selección de slot ──────────────────────
@@ -2742,13 +2809,13 @@ function _puedePonerProf(profId, dia, modulo, horario) {
 // Premia la compacidad del profesor: clases consecutivas, sin "ventanas"
 // internas (huecos inútiles que obligan al profesor a esperar entre clases).
 // El caller agrega ruido aleatorio pequeño para mantener diversidad entre reinicios.
-function _scoreSlot(prof, cursoId, d, m, horario, MODULOS) {
+function _scoreSlot(prof, cursoId, d, m, horario, MODULOS, idx = null) {
   let score = 0;
 
   // ── Compacidad del profesor en ese día ────────────────────────────────
-  const clHoy = horario
-    .filter(h => h.profesorId === prof.id && h.dia === d)
-    .map(h => h.modulo);
+  const clHoy = idx
+    ? [...(idx.profDia.get(`${prof.id}|${d}`) || [])]
+    : horario.filter(h => h.profesorId === prof.id && h.dia === d).map(h => h.modulo);
 
   if (clHoy.length > 0) {
     const sortedBefore = [...clHoy].sort((a, b) => a - b);
@@ -2772,7 +2839,13 @@ function _scoreSlot(prof, cursoId, d, m, horario, MODULOS) {
   }
 
   // ── Distribución del curso: evitar concentrar demasiadas clases en un día
-  const clasesDelCursoHoy = horario.filter(h => h.cursoId === cursoId && h.dia === d).length;
+  let clasesDelCursoHoy;
+  if (idx) {
+    clasesDelCursoHoy = 0;
+    for (let mm = 0; mm < MODULOS.length; mm++) if (idx.curso.has(`${cursoId}|${d}|${mm}`)) clasesDelCursoHoy++;
+  } else {
+    clasesDelCursoHoy = horario.filter(h => h.cursoId === cursoId && h.dia === d).length;
+  }
   if (clasesDelCursoHoy >= 3) score -= 6;
 
   return score;
@@ -2813,6 +2886,14 @@ function _detectarViolacionesConsecutivas(horario, DIAS) {
 
 // ── Una pasada de asignación sobre un conjunto de tareas ─────────────────
 function _pasadaAsignacion(tareas, horario, MODULOS, DIAS) {
+  // ── Índice O(1) sincronizado con `horario` durante toda la pasada ────────
+  // Esta función corre decenas de veces por generación (Fases 2, 2B, 2C,
+  // 3B y dentro del LNS), así que es el hot-path del algoritmo. Todas las
+  // mutaciones de `horario` dentro de esta función pasan por _pushEntrada/
+  // _popEntrada para mantener el índice sincronizado; todo chequeo de
+  // ocupación usa el índice (Maps) en vez de escanear el array.
+  const idx = _crearIndice(horario);
+
   // En las fases LNS el horario ya contiene entradas de profs "estables".
   // Re-ordenar las tareas por MRV REAL sobre ese estado actual:
   // quien tiene menos slots reales disponibles ahora va primero.
@@ -2822,8 +2903,8 @@ function _pasadaAsignacion(tareas, horario, MODULOS, DIAS) {
     ? [...tareas].sort((a, b) => {
         const cA = a.profCandidatos?.length ? a.profCandidatos : (a.prof ? [a.prof] : []);
         const cB = b.profCandidatos?.length ? b.profCandidatos : (b.prof ? [b.prof] : []);
-        const sA = cA.length ? Math.max(...cA.map(p => _contarSlotsPosibles(p, a.curso.id, horario, MODULOS, DIAS))) : 0;
-        const sB = cB.length ? Math.max(...cB.map(p => _contarSlotsPosibles(p, b.curso.id, horario, MODULOS, DIAS))) : 0;
+        const sA = cA.length ? Math.max(...cA.map(p => _contarSlotsPosibles(p, a.curso.id, horario, MODULOS, DIAS, idx))) : 0;
+        const sB = cB.length ? Math.max(...cB.map(p => _contarSlotsPosibles(p, b.curso.id, horario, MODULOS, DIAS, idx))) : 0;
         return (sA - a.hsReq) - (sB - b.hsReq);
       })
     : tareas;
@@ -2848,19 +2929,19 @@ function _pasadaAsignacion(tareas, horario, MODULOS, DIAS) {
       // Ordenar slots por fitness: premia compacidad del prof y distribución del curso.
       // El ruido (Math.random * 2) preserva diversidad entre reinicios aleatorios.
       const slotsScored = slots
-        .map(([m, d]) => ({ m, d, s: _scoreSlot(candidato, curso.id, d, m, horario, MODULOS) + Math.random() * 2 }))
+        .map(([m, d]) => ({ m, d, s: _scoreSlot(candidato, curso.id, d, m, horario, MODULOS, idx) + Math.random() * 2 }))
         .sort((a, b) => b.s - a.s);
       for (const { m, d } of slotsScored) {
         if (placed >= hsReq) break;
-        if (horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m)) continue;
-        if (!_profDisponible(candidato, d, m, horario)) continue;
-        if (!_puedePonerProf(candidato.id, d, m, horario)) continue; // restricción: máx. 2 horas seguidas
+        if (idx.curso.has(`${curso.id}|${d}|${m}`)) continue;
+        if (!_profDisponible(candidato, d, m, horario, false, idx)) continue;
+        if (!_puedePonerProf(candidato.id, d, m, horario, idx)) continue; // restricción: máx. 2 horas seguidas
 
         // ── Forward Checking ─────────────────────────────────────────────
-        horario.push({ id: uid(), cursoId: curso.id, materiaId: matId, profesorId: candidato.id, dia: d, modulo: m });
+        _pushEntrada(horario, idx, { id: uid(), cursoId: curso.id, materiaId: matId, profesorId: candidato.id, dia: d, modulo: m });
 
         // Check A: ¿siguen existiendo slots para las horas restantes de ESTA tarea?
-        const slotsRestSelf = _contarSlotsPosibles(candidato, curso.id, horario, MODULOS, DIAS);
+        const slotsRestSelf = _contarSlotsPosibles(candidato, curso.id, horario, MODULOS, DIAS, idx);
         let viable = slotsRestSelf >= (hsReq - placed - 1);
 
         // Check B: tareas posteriores → ¿alguna quedó sin slots suficientes en TODOS sus candidatos?
@@ -2871,31 +2952,28 @@ function _pasadaAsignacion(tareas, horario, MODULOS, DIAS) {
             if (!c2.length) continue;
             // Solo verificar tareas que involucran al mismo candidato (para no hacerlo O(n²) completo)
             if (!c2.some(p => p.id === candidato.id)) continue;
-            const maxSlots = Math.max(...c2.map(p => _contarSlotsPosibles(p, t2.curso.id, horario, MODULOS, DIAS)));
+            const maxSlots = Math.max(...c2.map(p => _contarSlotsPosibles(p, t2.curso.id, horario, MODULOS, DIAS, idx)));
             if (maxSlots < t2.hsReq) viable = false;
           }
         }
 
         // Check C: ¿el curso todavía tiene suficientes slots libres para sus horas restantes?
         if (viable) {
-          const slotsCursoLibres = (() => {
-            let cnt = 0;
-            for (let mm = 0; mm < MODULOS.length; mm++)
-              for (let dd = 0; dd < DIAS.length; dd++)
-                if (!horario.some(h => h.cursoId === curso.id && h.dia === dd && h.modulo === mm)) cnt++;
-            return cnt;
-          })();
+          let slotsCursoLibres = 0;
+          for (let mm = 0; mm < MODULOS.length; mm++)
+            for (let dd = 0; dd < DIAS.length; dd++)
+              if (!idx.curso.has(`${curso.id}|${dd}|${mm}`)) slotsCursoLibres++;
           // Horas restantes del curso completo (todas sus materias)
           const hsCursoRestantes = tareasOrdenadas
             .filter(t2 => t2.curso.id === curso.id)
             .reduce((s, t2) => {
-              const asig = horario.filter(h => h.cursoId === curso.id && h.materiaId === t2.matId).length;
+              const asig = idx.cursoMat.get(`${curso.id}|${t2.matId}`) || 0;
               return s + Math.max(0, t2.hsReq - asig);
             }, 0);
           if (slotsCursoLibres < hsCursoRestantes) viable = false;
         }
 
-        if (!viable) { horario.pop(); continue; }
+        if (!viable) { _popEntrada(horario, idx); continue; }
         // ── Fin Forward Checking ──────────────────────────────────────────
 
         placed++;
@@ -2908,14 +2986,14 @@ function _pasadaAsignacion(tareas, horario, MODULOS, DIAS) {
         if (placed >= hsReq) break;
         for (const [m, d] of slots) {
           if (placed >= hsReq) break;
-          if (horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m)) continue;
+          if (idx.curso.has(`${curso.id}|${d}|${m}`)) continue;
           // Verificar disponibilidad ignorando maxHs (el prof tiene el slot libre en su grilla)
-          if (!_profDisponible(candidato, d, m, horario, true)) continue;
+          if (!_profDisponible(candidato, d, m, horario, true, idx)) continue;
           // Solo si el slot ya fue rechazado únicamente por maxHs
-          const razon = _razonBloqueo(candidato, d, m, horario);
+          const razon = _razonBloqueo(candidato, d, m, horario, idx);
           if (razon !== 'maxHs') continue;
-          if (!_puedePonerProf(candidato.id, d, m, horario)) continue; // restricción: máx. 2 horas seguidas
-          horario.push({ id: uid(), cursoId: curso.id, materiaId: matId, profesorId: candidato.id, dia: d, modulo: m });
+          if (!_puedePonerProf(candidato.id, d, m, horario, idx)) continue; // restricción: máx. 2 horas seguidas
+          _pushEntrada(horario, idx, { id: uid(), cursoId: curso.id, materiaId: matId, profesorId: candidato.id, dia: d, modulo: m });
           placed++;
         }
       }
