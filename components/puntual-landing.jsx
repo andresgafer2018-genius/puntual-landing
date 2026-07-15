@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import PuntualWidget from "@/components/PuntualWidget";
-const DEMO_VIDEO_URL = null;
+const DEMO_VIDEO_URL = "https://www.youtube.com/embed/g2fhV206fQo";
 
 const NAV_LINKS = ["Funciones", "Cómo funciona", "Precios", "Contacto"];
 
