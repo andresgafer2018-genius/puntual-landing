@@ -1820,11 +1820,12 @@ function saveSlot() {
 // `_pasadaAsignacion` fue reescrita para crear y mantener el índice.
 function _crearIndice(horario) {
   const idx = {
-    curso: new Map(),      // "cursoId|dia|modulo" -> entrada
-    prof: new Map(),       // "profId|dia|modulo" -> entrada
-    profCount: new Map(),  // profId -> horas asignadas
-    profDia: new Map(),    // "profId|dia" -> Set(modulos)
-    cursoMat: new Map(),   // "cursoId|matId" -> horas asignadas
+    curso: new Map(),        // "cursoId|dia|modulo" -> entrada
+    prof: new Map(),         // "profId|dia|modulo" -> entrada
+    profCount: new Map(),    // profId -> horas asignadas
+    profDia: new Map(),      // "profId|dia" -> Set(modulos)
+    cursoMat: new Map(),     // "cursoId|matId" -> horas asignadas
+    profEntradas: new Map(), // profId -> Set(entrada)  [Fase 2: swaps]
   };
   for (const h of horario) _indiceAgregar(idx, h);
   return idx;
@@ -1839,6 +1840,8 @@ function _indiceAgregar(idx, h) {
   idx.profDia.get(kPD).add(h.modulo);
   const kCM = `${h.cursoId}|${h.materiaId}`;
   idx.cursoMat.set(kCM, (idx.cursoMat.get(kCM) || 0) + 1);
+  if (!idx.profEntradas.has(h.profesorId)) idx.profEntradas.set(h.profesorId, new Set());
+  idx.profEntradas.get(h.profesorId).add(h);
 }
 
 function _indiceQuitar(idx, h) {
@@ -1852,6 +1855,8 @@ function _indiceQuitar(idx, h) {
   const kCM = `${h.cursoId}|${h.materiaId}`;
   const cCM = (idx.cursoMat.get(kCM) || 1) - 1;
   if (cCM <= 0) idx.cursoMat.delete(kCM); else idx.cursoMat.set(kCM, cCM);
+  const setPE = idx.profEntradas.get(h.profesorId);
+  if (setPE) { setPE.delete(h); if (setPE.size === 0) idx.profEntradas.delete(h.profesorId); }
 }
 
 /** Empuja una entrada al horario y (si hay índice) lo mantiene sincronizado */
@@ -1865,6 +1870,18 @@ function _pushEntrada(horario, idx, entrada) {
 function _popEntrada(horario, idx) {
   const entrada = horario.pop();
   if (entrada && idx) _indiceQuitar(idx, entrada);
+  return entrada;
+}
+
+/** Modifica en el lugar los campos de una entrada ya existente (swap de
+ *  día/módulo, o reasignación de profesor) manteniendo el índice sincronizado:
+ *  saca la entrada del índice con sus valores viejos, aplica los cambios, y
+ *  la vuelve a agregar con los valores nuevos. Usar SIEMPRE en vez de mutar
+ *  entrada.dia/modulo/profesorId directamente cuando hay índice en juego. */
+function _actualizarEntrada(idx, entrada, cambios) {
+  if (idx) _indiceQuitar(idx, entrada);
+  Object.assign(entrada, cambios);
+  if (idx) _indiceAgregar(idx, entrada);
   return entrada;
 }
 
@@ -2128,7 +2145,7 @@ function _ordenarPorMRV(tareas, MODULOS, DIAS) {
 //  C) Iteración multi-pasada: repetir todo el proceso mientras haya mejoras,
 //     porque un swap exitoso puede desbloquear otros
 
-function _intentarSwapDirecto(tarea, horario, MODULOS, DIAS) {
+function _intentarSwapDirecto(tarea, horario, MODULOS, DIAS, idx = null) {
   const { curso, matId, profCandidatos, prof: profPrincipal, hsReq } = tarea;
   const candidatos = profCandidatos?.length ? profCandidatos : (profPrincipal ? [profPrincipal] : []);
   if (!candidatos.length) return 0;
@@ -2144,8 +2161,13 @@ function _intentarSwapDirecto(tarea, horario, MODULOS, DIAS) {
       if (placed >= hsReq) break;
       const avail = prof.disponibilidad || defaultAvail();
       if (m >= avail.length || d >= (avail[m] || []).length || !avail[m][d]) continue;
-      if (horario.some(h => h.profesorId === prof.id && h.dia === d && h.modulo === m)) continue;
-      const claseExistente = horario.find(h => h.cursoId === curso.id && h.dia === d && h.modulo === m);
+      const profOcupado = idx
+        ? idx.prof.has(`${prof.id}|${d}|${m}`)
+        : horario.some(h => h.profesorId === prof.id && h.dia === d && h.modulo === m);
+      if (profOcupado) continue;
+      const claseExistente = idx
+        ? idx.curso.get(`${curso.id}|${d}|${m}`)
+        : horario.find(h => h.cursoId === curso.id && h.dia === d && h.modulo === m);
       if (!claseExistente) continue;
       const profBlocking = state.profesores.find(p => p.id === claseExistente.profesorId);
       if (!profBlocking) continue;
@@ -2157,12 +2179,14 @@ function _intentarSwapDirecto(tarea, horario, MODULOS, DIAS) {
       );
       for (const [hm, hd] of huecos) {
         if (hm === m && hd === d) continue;
-        if (horario.some(h => h.cursoId === curso.id && h.dia === hd && h.modulo === hm)) continue;
-        if (_profDisponible(profBlocking, hd, hm, horario) &&
-            _puedePonerProf(prof.id, d, m, horario)) { // restricción: máx. 2 horas seguidas
-          claseExistente.dia = hd;
-          claseExistente.modulo = hm;
-          horario.push({ id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
+        const cursoOcupadoHueco = idx
+          ? idx.curso.has(`${curso.id}|${hd}|${hm}`)
+          : horario.some(h => h.cursoId === curso.id && h.dia === hd && h.modulo === hm);
+        if (cursoOcupadoHueco) continue;
+        if (_profDisponible(profBlocking, hd, hm, horario, false, idx) &&
+            _puedePonerProf(prof.id, d, m, horario, idx)) { // restricción: máx. 2 horas seguidas
+          _actualizarEntrada(idx, claseExistente, { dia: hd, modulo: hm });
+          _pushEntrada(horario, idx, { id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
           placed++;
           break;
         }
@@ -2172,7 +2196,7 @@ function _intentarSwapDirecto(tarea, horario, MODULOS, DIAS) {
   return placed;
 }
 
-function _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS) {
+function _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS, idx = null) {
   // Swap de profundidad 2: A bloquea a B, B bloquea a C, C tiene hueco libre
   // Prueba todos los profCandidatos, no solo el primero
   const { curso, matId, profCandidatos, prof: profPrincipal, hsReq } = tarea;
@@ -2190,8 +2214,13 @@ function _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS) {
       if (placed >= hsReq) break;
       const avail = prof.disponibilidad || defaultAvail();
       if (mA >= avail.length || dA >= (avail[mA] || []).length || !avail[mA][dA]) continue;
-      if (horario.some(h => h.profesorId === prof.id && h.dia === dA && h.modulo === mA)) continue;
-      const claseB = horario.find(h => h.cursoId === curso.id && h.dia === dA && h.modulo === mA);
+      const profAOcupado = idx
+        ? idx.prof.has(`${prof.id}|${dA}|${mA}`)
+        : horario.some(h => h.profesorId === prof.id && h.dia === dA && h.modulo === mA);
+      if (profAOcupado) continue;
+      const claseB = idx
+        ? idx.curso.get(`${curso.id}|${dA}|${mA}`)
+        : horario.find(h => h.cursoId === curso.id && h.dia === dA && h.modulo === mA);
       if (!claseB) continue;
       const profB = state.profesores.find(p => p.id === claseB.profesorId);
       if (!profB) continue;
@@ -2206,20 +2235,28 @@ function _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS) {
         if (mB === mA && dB === dA) continue;
         const availB = profB.disponibilidad || defaultAvail();
         if (mB >= availB.length || dB >= (availB[mB] || []).length || !availB[mB][dB]) continue;
-        if (horario.some(h => h.profesorId === profB.id && h.dia === dB && h.modulo === mB)) continue;
-        const claseC = horario.find(h => h.cursoId === curso.id && h.dia === dB && h.modulo === mB);
+        const profBOcupado = idx
+          ? idx.prof.has(`${profB.id}|${dB}|${mB}`)
+          : horario.some(h => h.profesorId === profB.id && h.dia === dB && h.modulo === mB);
+        if (profBOcupado) continue;
+        const claseC = idx
+          ? idx.curso.get(`${curso.id}|${dB}|${mB}`)
+          : horario.find(h => h.cursoId === curso.id && h.dia === dB && h.modulo === mB);
         if (!claseC) continue;
         const profC = state.profesores.find(p => p.id === claseC.profesorId);
         if (!profC) continue;
         // Buscar hueco libre para profC
         for (let hm = 0; hm < MODULOS.length && !encadenado; hm++) {
           for (let hd = 0; hd < DIAS.length && !encadenado; hd++) {
-            if (horario.some(h => h.cursoId === curso.id && h.dia === hd && h.modulo === hm)) continue;
-            if (_profDisponible(profC, hd, hm, horario) &&
-                _puedePonerProf(prof.id, dA, mA, horario)) { // restricción: máx. 2 horas seguidas
-              claseC.dia = hd; claseC.modulo = hm;
-              claseB.dia = dB; claseB.modulo = mB;
-              horario.push({ id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: dA, modulo: mA });
+            const cursoOcupadoHueco = idx
+              ? idx.curso.has(`${curso.id}|${hd}|${hm}`)
+              : horario.some(h => h.cursoId === curso.id && h.dia === hd && h.modulo === hm);
+            if (cursoOcupadoHueco) continue;
+            if (_profDisponible(profC, hd, hm, horario, false, idx) &&
+                _puedePonerProf(prof.id, dA, mA, horario, idx)) { // restricción: máx. 2 horas seguidas
+              _actualizarEntrada(idx, claseC, { dia: hd, modulo: hm });
+              _actualizarEntrada(idx, claseB, { dia: dB, modulo: mB });
+              _pushEntrada(horario, idx, { id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: dA, modulo: mA });
               placed++;
               encadenado = true;
             }
@@ -2235,7 +2272,7 @@ function _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS) {
 // Cubre el caso opuesto al SwapDirecto: el slot del curso está libre pero el
 // profesor está dando clase en otro curso. Se mueve esa otra clase para liberar
 // al profesor.
-function _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS) {
+function _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS, idx = null) {
   const { curso, matId, profCandidatos, prof: profPrincipal, hsReq } = tarea;
   const candidatos = profCandidatos?.length ? profCandidatos : (profPrincipal ? [profPrincipal] : []);
   if (!candidatos.length) return 0;
@@ -2250,12 +2287,17 @@ function _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS) {
     for (const [m, d] of slots) {
       if (placed >= hsReq) break;
       // El slot del curso debe estar libre
-      if (horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m)) continue;
+      const cursoOcupado = idx
+        ? idx.curso.has(`${curso.id}|${d}|${m}`)
+        : horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m);
+      if (cursoOcupado) continue;
       // El prof debe tener disponibilidad en su grilla
       const avail = prof.disponibilidad || defaultAvail();
       if (m >= avail.length || d >= (avail[m] || []).length || !avail[m][d]) continue;
       // El prof debe estar asignado a OTRO curso en este slot (es el bloqueador)
-      const claseBlocking = horario.find(h => h.profesorId === prof.id && h.dia === d && h.modulo === m);
+      const claseBlocking = idx
+        ? idx.prof.get(`${prof.id}|${d}|${m}`)
+        : horario.find(h => h.profesorId === prof.id && h.dia === d && h.modulo === m);
       if (!claseBlocking) continue;
       // Buscar hueco libre para reubicar la clase bloqueante
       const huecos = _shuffle(
@@ -2266,13 +2308,15 @@ function _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS) {
       for (const [hm, hd] of huecos) {
         if (hm === m && hd === d) continue;
         // El otro curso debe estar libre en ese nuevo slot
-        if (horario.some(h => h.cursoId === claseBlocking.cursoId && h.dia === hd && h.modulo === hm)) continue;
+        const otroCursoOcupado = idx
+          ? idx.curso.has(`${claseBlocking.cursoId}|${hd}|${hm}`)
+          : horario.some(h => h.cursoId === claseBlocking.cursoId && h.dia === hd && h.modulo === hm);
+        if (otroCursoOcupado) continue;
         // El prof debe estar disponible en el nuevo slot
-        if (_profDisponible(prof, hd, hm, horario) &&
-            _puedePonerProf(prof.id, d, m, horario)) { // restricción: máx. 2 horas seguidas
-          claseBlocking.dia = hd;
-          claseBlocking.modulo = hm;
-          horario.push({ id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
+        if (_profDisponible(prof, hd, hm, horario, false, idx) &&
+            _puedePonerProf(prof.id, d, m, horario, idx)) { // restricción: máx. 2 horas seguidas
+          _actualizarEntrada(idx, claseBlocking, { dia: hd, modulo: hm });
+          _pushEntrada(horario, idx, { id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
           placed++;
           break;
         }
@@ -2287,7 +2331,7 @@ function _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS) {
 // curso en un slot donde NUESTRO curso está libre. Si existe un sustituto que
 // también enseñe esa otra materia y esté libre en ese slot, se hace el cambio
 // y el prof-candidato queda libre para la tarea pendiente.
-function _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS) {
+function _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS, idx = null) {
   const { curso, matId, profCandidatos, prof: profPrincipal, hsReq } = tarea;
   const candidatos = profCandidatos?.length ? profCandidatos : (profPrincipal ? [profPrincipal] : []);
   if (!candidatos.length) return 0;
@@ -2295,25 +2339,32 @@ function _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS) {
   for (const prof of _shuffle(candidatos)) {
     if (placed >= hsReq) break;
     // Buscar clases donde este prof ya está asignado (enseñando otro curso)
-    const clasesDelProf = horario.filter(h => h.profesorId === prof.id);
+    const clasesDelProf = idx
+      ? Array.from(idx.profEntradas.get(prof.id) || [])
+      : horario.filter(h => h.profesorId === prof.id);
     for (const claseOcupada of _shuffle(clasesDelProf)) {
       if (placed >= hsReq) break;
       const { dia: d, modulo: m, cursoId: otroCursoId, materiaId: otraMatId } = claseOcupada;
       // El slot de NUESTRO curso debe estar libre
-      if (horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m)) continue;
+      const cursoOcupado = idx
+        ? idx.curso.has(`${curso.id}|${d}|${m}`)
+        : horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m);
+      if (cursoOcupado) continue;
       // Buscar un sustituto que pueda dar otraMatId en ese mismo slot
       const sustitutos = state.profesores.filter(p =>
         p.id !== prof.id && p.materias?.includes(otraMatId)
       );
       for (const sustituto of _shuffle(sustitutos)) {
-        if (_profDisponible(sustituto, d, m, horario)) {
+        if (_profDisponible(sustituto, d, m, horario, false, idx)) {
           // Verificar que el sustituto no exceda su maxHs
-          const hsAsigSust = horario.filter(h => h.profesorId === sustituto.id).length;
+          const hsAsigSust = idx
+            ? (idx.profCount.get(sustituto.id) || 0)
+            : horario.filter(h => h.profesorId === sustituto.id).length;
           if (hsAsigSust >= sustituto.maxHs) continue;
-          if (!_puedePonerProf(prof.id, d, m, horario)) continue; // restricción: máx. 2 horas seguidas
+          if (!_puedePonerProf(prof.id, d, m, horario, idx)) continue; // restricción: máx. 2 horas seguidas
           // Hacer la sustitución
-          claseOcupada.profesorId = sustituto.id;
-          horario.push({ id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
+          _actualizarEntrada(idx, claseOcupada, { profesorId: sustituto.id });
+          _pushEntrada(horario, idx, { id: uid(), cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
           placed++;
           break;
         }
@@ -2423,6 +2474,12 @@ function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS) {
 
 function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS) {
   let totalResueltos = 0;
+  // Índice O(1) sincronizado durante toda la fase de swaps (Fase 2 de
+  // optimización). _intentarBacktrackTareas/_btSearch todavía no están
+  // migrados a índice, así que tras usarlos se reconstruye desde horario
+  // para no arrastrar un índice desincronizado (rebuild es O(n) pero solo
+  // ocurre en el camino de último recurso, cuando r===0).
+  let idx = _crearIndice(horario);
   // Trabajar sobre copia mutable de pendientes para actualizar hsReq dinámicamente
   const pendientes = pendientesInic.map(t => ({ ...t }));
   const MAX_RONDAS = 8;
@@ -2435,24 +2492,28 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS) {
       if (b.hsReq <= 0) return -1;
       const cA = a.profCandidatos?.length ? a.profCandidatos : (a.prof ? [a.prof] : []);
       const cB = b.profCandidatos?.length ? b.profCandidatos : (b.prof ? [b.prof] : []);
-      const sA = cA.length ? Math.max(...cA.map(p => _contarSlotsPosibles(p, a.curso.id, horario, MODULOS, DIAS))) : 0;
-      const sB = cB.length ? Math.max(...cB.map(p => _contarSlotsPosibles(p, b.curso.id, horario, MODULOS, DIAS))) : 0;
+      const sA = cA.length ? Math.max(...cA.map(p => _contarSlotsPosibles(p, a.curso.id, horario, MODULOS, DIAS, idx))) : 0;
+      const sB = cB.length ? Math.max(...cB.map(p => _contarSlotsPosibles(p, b.curso.id, horario, MODULOS, DIAS, idx))) : 0;
       return sA - sB;
     });
     for (const tarea of pendientes) {
       if (tarea.hsReq <= 0) continue;
       // 1) Swap directo: slot del curso ocupado, profesor libre
-      let r = _intentarSwapDirecto(tarea, horario, MODULOS, DIAS);
+      let r = _intentarSwapDirecto(tarea, horario, MODULOS, DIAS, idx);
       // 2) Swap prof ocupado: slot del curso libre, profesor ocupado en otro curso
-      if (r === 0) r = _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS);
+      if (r === 0) r = _intentarSwapProfOcupado(tarea, horario, MODULOS, DIAS, idx);
       // 3) Swap encadenado (profundidad 2)
-      if (r === 0) r = _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS);
+      if (r === 0) r = _intentarSwapEncadenado(tarea, horario, MODULOS, DIAS, idx);
       // 4) Sustitución de profesor: reemplazar al prof-candidato en otra clase
       //    para liberarlo para esta tarea pendiente
-      if (r === 0) r = _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS);
+      if (r === 0) r = _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS, idx);
       // 5) Backtracking profundidad 3: busca cadenas de 3 movimientos que
       //    los swaps greedy no detectan por orden aleatorio o profundidad limitada
-      if (r === 0) r = _intentarBacktrackTareas([tarea], horario, MODULOS, DIAS);
+      //    (no usa índice todavía → resincronizar si movió algo)
+      if (r === 0) {
+        r = _intentarBacktrackTareas([tarea], horario, MODULOS, DIAS);
+        if (r > 0) idx = _crearIndice(horario);
+      }
       tarea.hsReq -= r;
       resueltoEstaRonda += r;
       totalResueltos += r;
