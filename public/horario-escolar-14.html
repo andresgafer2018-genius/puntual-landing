@@ -3798,7 +3798,7 @@ function descargarReporteDisponibilidad() {
 // Los moves B, C y D son el corazón del SA: permiten reconfigurar el
 // horario para que futuros moves A encuentren huecos que antes no existían.
 // ──────────────────────────────────────────────────────────────────────────
-function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS) {
+function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadline = Infinity) {
   // ── Parámetros ────────────────────────────────────────────────────────────
   const T0       = 3.0;    // temperatura inicial (acepta Δ=1 con 72%, Δ=2 con 51%)
   const alpha    = 0.9998; // enfriamiento lento: ~28k iters hasta Tmin
@@ -3902,7 +3902,7 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS) {
 
   // ── Bucle SA ──────────────────────────────────────────────────────────────
   let T = T0;
-  for (let it = 0; it < MAX_ITER && T > Tmin && mejorCosto > 0; it++) {
+  for (let it = 0; it < MAX_ITER && T > Tmin && mejorCosto > 0 && (it % 200 !== 0 || Date.now() < deadline); it++) {
     T *= alpha;
     const r = Math.random();
 
@@ -4099,6 +4099,16 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
     });
   });
 
+  // ── Budget de tiempo real para todo el pipeline ────────────────────────
+  // Techo duro: si se supera, cada fase deja de intentar más rondas y se
+  // queda con el mejor horario encontrado hasta ese momento. Antes este
+  // freno no existía en el código (solo en las notas de sesión), por lo
+  // que el tiempo total dependía 100% de cuántas rondas necesitaba cada
+  // fase para converger — ahora queda acotado sin importar la variancia
+  // propia del algoritmo aleatorio.
+  const _GEN_BUDGET_MS = 25000;
+  const _genDeadline = Date.now() + _GEN_BUDGET_MS;
+
   // ── FASE 0: Pre-flight ────────────────────────────────────────────────
   const advertencias = _preFlightCheck(todasLasTareas, MODULOS, DIAS);
   const erroresCriticos = advertencias.filter(a => a.tipo === 'error');
@@ -4120,7 +4130,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   let mejorHorario = [];
   let mejorPendientes = tareasOrdenadas.map(t => ({ ...t })); // worst case: todo pendiente
 
-  for (let intento = 0; intento < MAX_INTENTOS; intento++) {
+  for (let intento = 0; intento < MAX_INTENTOS && Date.now() < _genDeadline; intento++) {
     const horarioIntento = [];
     // En el primer intento respetamos MRV; en los siguientes mezclamos
     const tareasIntento = intento === 0
@@ -4149,7 +4159,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   if (mejorPendientes.length > 0) {
     const MAX_GUIADOS = 12;
     const pendingKey = t => `${t.curso.id}_${t.matId}`;
-    for (let g = 0; g < MAX_GUIADOS; g++) {
+    for (let g = 0; g < MAX_GUIADOS && Date.now() < _genDeadline; g++) {
       const horarioIntento = [];
       const pendingKeys = new Set(mejorPendientes.map(pendingKey));
       // Pendientes van primero (ordenadas por MRV propio), luego el resto mezclado
@@ -4174,7 +4184,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // arrancan con más espacio libre porque no compiten con ellos mismos.
   if (mejorPendientes.length > 0) {
     const MAX_LNS = 20;
-    for (let lns = 0; lns < MAX_LNS && mejorPendientes.length > 0; lns++) {
+    for (let lns = 0; lns < MAX_LNS && mejorPendientes.length > 0 && Date.now() < _genDeadline; lns++) {
       // 1. Profesores involucrados en pendientes
       const profsPend = new Set();
       mejorPendientes.forEach(t => {
@@ -4246,7 +4256,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
       let mejorH_PS = state.horario.slice();
       let mejorP_PS = pendPS;
       const MAX_LNS_PS = 15;
-      for (let lns = 0; lns < MAX_LNS_PS && mejorP_PS.length > 0; lns++) {
+      for (let lns = 0; lns < MAX_LNS_PS && mejorP_PS.length > 0 && Date.now() < _genDeadline; lns++) {
         const profsPend = new Set();
         mejorP_PS.forEach(t => {
           const c = t.profCandidatos?.length ? t.profCandidatos : (t.prof ? [t.prof] : []);
@@ -4293,7 +4303,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // Corre siempre (aunque mejorCosto sea 0 termina en la primera iteración).
   // Si mejora el horario actual, lo reemplaza.
   {
-    const resultSA = _recocidoSimulado(state.horario, todasLasTareas, MODULOS, DIAS);
+    const resultSA = _recocidoSimulado(state.horario, todasLasTareas, MODULOS, DIAS, _genDeadline);
     if (resultSA.horario.length >= state.horario.length) {
       // Aceptar solo si no perdemos clases asignadas
       state.horario = resultSA.horario;
@@ -4316,7 +4326,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // búsqueda de profundidad 5 es manejable y encuentra cadenas de
   // 5 movimientos encadenados que el BT normal (depth 4) no detecta.
   // No toca el horario en bloque — opera slot a slot, sin riesgo de regresión.
-  if (mejorPendientes.length > 0 && mejorPendientes.length <= 15) {
+  if (mejorPendientes.length > 0 && mejorPendientes.length <= 15 && Date.now() < _genDeadline) {
     const MAX_DEPTH_FINAL = 5;
     const pendOrdenadas = [...mejorPendientes].sort((a, b) => {
       const cA = a.profCandidatos?.length ? a.profCandidatos : (a.prof ? [a.prof] : []);
@@ -4360,7 +4370,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // (ocupan slots de sus profesores candidatos o de sus cursos), las libera,
   // y trata de reinsertar esas 20 + las pendientes juntas con 18 órdenes
   // distintos. Solo acepta si el resultado asigna más clases que el estado actual.
-  if (mejorPendientes.length > 0) {
+  if (mejorPendientes.length > 0 && Date.now() < _genDeadline) {
     const resultLNST = _lnsTargetado(mejorPendientes, state.horario, todasLasTareas, MODULOS, DIAS);
     if (resultLNST) {
       state.horario = resultLNST;
@@ -4382,7 +4392,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // puro (5000 iteraciones, solo acepta movimientos que reducen conflictos).
   // No altera el horario válido ya construido: opera únicamente sobre las
   // entradas recién forzadas. Las que no quedan limpias se descartan.
-  if (mejorPendientes.length > 0) {
+  if (mejorPendientes.length > 0 && Date.now() < _genDeadline) {
     const resueltosHC = _minConflictsHillClimbing(
       mejorPendientes, state.horario, MODULOS, DIAS
     );
