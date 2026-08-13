@@ -2565,7 +2565,7 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS, deadline = Infin
 //   4. Arma un pool = entradas liberadas + pendientes originales.
 //   5. Intenta re-insertar el pool con MAX_LNS_T órdenes distintos sobre el horario base.
 //   6. Acepta el resultado solo si asigna más clases que el estado actual.
-function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS) {
+function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS, deadline = Infinity) {
   if (!pendientes.length || !horario.length) return null;
 
   // 1. Scoring: cuántas tareas pendientes bloquea cada entrada asignada
@@ -2596,6 +2596,7 @@ function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS) {
   let radioActual = Math.min(20, candidatasALiberar.length);
 
   for (let i = 0; i < MAX_LNS_T; i++) {
+    if (Date.now() >= deadline) break;
     // Agrandar vecindad si llevamos 4 rondas sin mejora
     if (sinMejoraConsecutiva >= 4) {
       radioActual = Math.min(radioActual + 5, candidatasALiberar.length);
@@ -2657,16 +2658,18 @@ function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS) {
 //   Costo 2 → excede max horas declarado
 //   Costo 3 → día completamente nuevo para el prof
 // Devuelve array con datos completos para el reporte de negociación.
-function _asignarForzado(pendientes, horario, MODULOS, DIAS) {
+function _asignarForzado(pendientes, horario, MODULOS, DIAS, deadline = Infinity) {
   const resultado = [];
 
-  pendientes.forEach(({ curso, matId, prof, profCandidatos, hsReq }) => {
+  for (const { curso, matId, prof, profCandidatos, hsReq } of pendientes) {
+    if (Date.now() >= deadline) break;
     const candidatos = profCandidatos?.length ? profCandidatos : (prof ? [prof] : []);
-    if (!candidatos.length) return;
+    if (!candidatos.length) continue;
     const mat = state.materias.find(m => m.id === matId);
 
     let placed = 0;
     while (placed < hsReq) {
+      if (Date.now() >= deadline) break;
       let mejorOpcion = null;
       let mejorScore  = Infinity;
 
@@ -2737,12 +2740,12 @@ function _asignarForzado(pendientes, horario, MODULOS, DIAS) {
       resultado.push({ entrada, prof: candidato, curso, mat, violaciones, minutos, diasNormales });
       placed++;
     }
-  });
+  }
 
   return resultado;
 }
 
-function _minConflictsHillClimbing(pendientes, horario, MODULOS, DIAS) {
+function _minConflictsHillClimbing(pendientes, horario, MODULOS, DIAS, deadline = Infinity) {
   if (!pendientes.length) return 0;
 
   // ── Paso 1: Forzar asignación en cualquier slot libre del curso ──────
@@ -2793,6 +2796,7 @@ function _minConflictsHillClimbing(pendientes, horario, MODULOS, DIAS) {
   // Al moverse dentro de los slots libres del curso, nunca se introduce
   // doble-booking del curso (invariante garantizado por la condición del filtro).
   for (let iter = 0; iter < MAX_HC_ITER; iter++) {
+    if (Date.now() >= deadline) break;
     // Seleccionar aleatoriamente una clase forzada con conflictos
     const conflictivas = horario.filter(e => idsAgregados.has(e.id) && conflictosEntrada(e, horario) > 0);
     if (!conflictivas.length) break;
@@ -4384,7 +4388,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // y trata de reinsertar esas 20 + las pendientes juntas con 18 órdenes
   // distintos. Solo acepta si el resultado asigna más clases que el estado actual.
   if (mejorPendientes.length > 0 && Date.now() < _genDeadline) {
-    const resultLNST = _lnsTargetado(mejorPendientes, state.horario, todasLasTareas, MODULOS, DIAS);
+    const resultLNST = _lnsTargetado(mejorPendientes, state.horario, todasLasTareas, MODULOS, DIAS, _genDeadline);
     if (resultLNST) {
       state.horario = resultLNST;
       ok = state.horario.length;
@@ -4407,7 +4411,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // entradas recién forzadas. Las que no quedan limpias se descartan.
   if (mejorPendientes.length > 0 && Date.now() < _genDeadline) {
     const resueltosHC = _minConflictsHillClimbing(
-      mejorPendientes, state.horario, MODULOS, DIAS
+      mejorPendientes, state.horario, MODULOS, DIAS, _genDeadline
     );
     if (resueltosHC > 0) {
       ok += resueltosHC;
@@ -4428,7 +4432,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // Solo se activa si el usuario eligió "Forzar clases restantes" en el modal.
   state._forzados = [];
   if (conForzado && mejorPendientes.length > 0) {
-    state._forzados = _asignarForzado(mejorPendientes, state.horario, MODULOS, DIAS);
+    state._forzados = _asignarForzado(mejorPendientes, state.horario, MODULOS, DIAS, _genDeadline);
     if (state._forzados.length > 0) {
       ok += state._forzados.length;
       mejorPendientes = [];
