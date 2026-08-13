@@ -4430,9 +4430,16 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // ── FASE 8: Asignación Forzada con Penalidad (solo si conForzado=true) ────
   // Coloca las clases restantes rompiendo disponibilidad del prof.
   // Solo se activa si el usuario eligió "Forzar clases restantes" en el modal.
+  // IMPORTANTE: usa un deadline PROPIO, independiente de _genDeadline. Si las
+  // fases exploratorias (1-7) ya consumieron todo el presupuesto de 25s,
+  // FASE 8 debe igual tener su oportunidad de cerrar el horario — es la
+  // garantía que "Con forzar" le promete al usuario, y es barata (recorre
+  // candidatos × slots, sin backtracking ni búsqueda combinatoria), así que
+  // no corre el mismo riesgo de colgarse que las fases anteriores.
   state._forzados = [];
   if (conForzado && mejorPendientes.length > 0) {
-    state._forzados = _asignarForzado(mejorPendientes, state.horario, MODULOS, DIAS, _genDeadline);
+    const _forzadoDeadline = Date.now() + 8000; // presupuesto propio: 8s
+    state._forzados = _asignarForzado(mejorPendientes, state.horario, MODULOS, DIAS, _forzadoDeadline);
     if (state._forzados.length > 0) {
       ok += state._forzados.length;
       mejorPendientes = [];
