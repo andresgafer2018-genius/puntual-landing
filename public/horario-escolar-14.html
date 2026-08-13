@@ -2381,13 +2381,15 @@ function _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS, idx = null
 // A diferencia de los swaps greedy, RESTAURA el estado si falla,
 // garantizando que no deja el horario en estado inconsistente.
 // visited: Set de IDs de entradas actualmente "en vuelo" (anti-ciclos).
-function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visited) {
+function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visited, deadline = Infinity) {
+  if (Date.now() >= deadline) return false;
   const prof = state.profesores.find(p => p.id === profId);
   if (!prof) return false;
   const avail = prof.disponibilidad || defaultAvail();
 
   for (let m = 0; m < MODULOS.length; m++) {
     for (let d = 0; d < DIAS.length; d++) {
+      if (Date.now() >= deadline) return false;
       if (!avail[m]?.[d]) continue;
 
       const clC = horario.find(h => h.cursoId === cursoId && h.dia === d && h.modulo === m);
@@ -2418,7 +2420,7 @@ function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visite
         visited.add(blocker.id);
         // Intentar reubicar el bloqueador en cualquier otro slot
         const ok = _btSearch(blocker.cursoId, blocker.materiaId, pB.id,
-                              horario, MODULOS, DIAS, depth - 1, visited);
+                              horario, MODULOS, DIAS, depth - 1, visited, deadline);
         visited.delete(blocker.id);
 
         if (ok) {
@@ -2442,7 +2444,7 @@ function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visite
 }
 
 // Wrapper: intenta colocar cada hora faltante de cada tarea usando backtracking
-function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS) {
+function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS, deadline = Infinity) {
   let total = 0;
   const MAX_DEPTH = 4; // era 3 — profundidad extra encuentra cadenas más largas
   // Ordenar por menos slots posibles primero (los más difíciles primero)
@@ -2454,13 +2456,16 @@ function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS) {
     return sA - sB;
   });
   for (const tarea of ordenadas) {
+    if (Date.now() >= deadline) break;
     if (tarea.hsReq <= 0) continue;
     const candidatos = tarea.profCandidatos?.length ? tarea.profCandidatos : (tarea.prof ? [tarea.prof] : []);
     for (let h = 0; h < tarea.hsReq; h++) {
+      if (Date.now() >= deadline) break;
       let placed = false;
       for (const prof of candidatos) {
+        if (Date.now() >= deadline) break;
         if (_btSearch(tarea.curso.id, tarea.matId, prof.id,
-                      horario, MODULOS, DIAS, MAX_DEPTH, new Set())) {
+                      horario, MODULOS, DIAS, MAX_DEPTH, new Set(), deadline)) {
           placed = true;
           break;
         }
@@ -2472,7 +2477,7 @@ function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS) {
   return total;
 }
 
-function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS) {
+function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS, deadline = Infinity) {
   let totalResueltos = 0;
   // Índice O(1) sincronizado durante toda la fase de swaps (Fase 2 de
   // optimización). _intentarBacktrackTareas/_btSearch todavía no están
@@ -2484,6 +2489,7 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS) {
   const pendientes = pendientesInic.map(t => ({ ...t }));
   const MAX_RONDAS = 8;
   for (let ronda = 0; ronda < MAX_RONDAS; ronda++) {
+    if (Date.now() >= deadline) break;
     let resueltoEstaRonda = 0;
     // Re-ordenar por más restringidos primero en cada ronda (dinámica)
     pendientes.sort((a, b) => {
@@ -2497,6 +2503,7 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS) {
       return sA - sB;
     });
     for (const tarea of pendientes) {
+      if (Date.now() >= deadline) break;
       if (tarea.hsReq <= 0) continue;
       // 1) Swap directo: slot del curso ocupado, profesor libre
       let r = _intentarSwapDirecto(tarea, horario, MODULOS, DIAS, idx);
@@ -2508,10 +2515,13 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS) {
       //    para liberarlo para esta tarea pendiente
       if (r === 0) r = _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS, idx);
       // 5) Backtracking profundidad 3: busca cadenas de 3 movimientos que
-      //    los swaps greedy no detectan por orden aleatorio o profundidad limitada
+      //    los swaps greedy no detectan por orden aleatoria o profundidad limitada
       //    (no usa índice todavía → resincronizar si movió algo)
+      //    Se le pasa el deadline global para que no cuelgue la generación:
+      //    la recursión de _btSearch puede explotar combinatoriamente con
+      //    muchos profesores/materias candidatas.
       if (r === 0) {
-        r = _intentarBacktrackTareas([tarea], horario, MODULOS, DIAS);
+        r = _intentarBacktrackTareas([tarea], horario, MODULOS, DIAS, deadline);
         if (r > 0) idx = _crearIndice(horario);
       }
       tarea.hsReq -= r;
@@ -4235,7 +4245,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
 
   // ── FASE 3: Swaps para resolver pendientes ────────────────────────────
   const resueltosPorSwap = mejorPendientes.length > 0
-    ? _intentarSwaps(mejorPendientes, state.horario, MODULOS, DIAS)
+    ? _intentarSwaps(mejorPendientes, state.horario, MODULOS, DIAS, _genDeadline)
     : 0;
 
   ok += resueltosPorSwap;
@@ -4292,7 +4302,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
         state.horario = mejorH_PS;
         mejorPendientes = mejorP_PS;
         const r3b = mejorP_PS.length > 0
-          ? _intentarSwaps(mejorP_PS, state.horario, MODULOS, DIAS)
+          ? _intentarSwaps(mejorP_PS, state.horario, MODULOS, DIAS, _genDeadline)
           : 0;
         ok += r3b;
       }
@@ -4337,13 +4347,16 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
     });
     let resueltosBT5 = 0;
     for (const tarea of pendOrdenadas) {
+      if (Date.now() >= _genDeadline) break;
       if (tarea.hsReq <= 0) continue;
       const candidatos = tarea.profCandidatos?.length ? tarea.profCandidatos : (tarea.prof ? [tarea.prof] : []);
       for (let h = 0; h < tarea.hsReq; h++) {
+        if (Date.now() >= _genDeadline) break;
         let placed = false;
         for (const prof of candidatos) {
+          if (Date.now() >= _genDeadline) break;
           if (_btSearch(tarea.curso.id, tarea.matId, prof.id,
-                        state.horario, MODULOS, DIAS, MAX_DEPTH_FINAL, new Set())) {
+                        state.horario, MODULOS, DIAS, MAX_DEPTH_FINAL, new Set(), _genDeadline)) {
             placed = true;
             break;
           }
@@ -4446,7 +4459,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
 
   // Calcular el total real de horas sin asignar (directo desde el horario final,
   // sin contar las forzadas que ya están en el horario con flag forzado:true)
-  const fail = todasLasTareas.reduce((sum, { curso, matId }) => {
+  let fail = todasLasTareas.reduce((sum, { curso, matId }) => {
     const mat = state.materias.find(m => m.id === matId);
     const hsOriginal = (curso.horasPorMateria || {})[matId] || mat?.horas || 4;
     const hsAsig = state.horario.filter(h => h.cursoId === curso.id && h.materiaId === matId).length;
@@ -4454,31 +4467,36 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   }, 0);
 
   // Armar informe COMPLETO con diagnóstico de causa raíz (solo las que siguen sin resolver)
-  const sinResolver = [];
-  mejorPendientes.forEach(({ curso, matId, prof, profCandidatos, hsReq }) => {
-    const mat = state.materias.find(m => m.id === matId);
-    const hsAsig = state.horario.filter(h => h.cursoId === curso.id && h.materiaId === matId).length;
-    const hsOriginal = (curso.horasPorMateria || {})[matId] || mat?.horas || 4;
-    if (hsAsig < hsOriginal) {
-      const falta = hsOriginal - hsAsig;
-      const candidatos = profCandidatos?.length ? profCandidatos : (prof ? [prof] : []);
-      let causa = '';
-      if (!candidatos.length) {
-        causa = '⛔ Sin profesor asignado para esta materia';
-      } else {
-        const diags = candidatos.map(p => {
-          const tieneDisp = (p.disponibilidad || defaultAvail()).some(row => row.some(v => v));
-          const hsUsadas = state.horario.filter(h => h.profesorId === p.id).length;
-          const saturado = hsUsadas >= p.maxHs;
-          if (!tieneDisp) return `${p.apellido}: sin disponibilidad cargada`;
-          if (saturado) return `${p.apellido}: límite de ${p.maxHs}h alcanzado (tiene ${hsUsadas}h asig.)`;
-          return `${p.apellido}: sin slots libres en el horario`;
-        });
-        causa = diags.join(' | ');
+  let sinResolver = [];
+  function _construirSinResolver(lista) {
+    const arr = [];
+    lista.forEach(({ curso, matId, prof, profCandidatos, hsReq }) => {
+      const mat = state.materias.find(m => m.id === matId);
+      const hsAsig = state.horario.filter(h => h.cursoId === curso.id && h.materiaId === matId).length;
+      const hsOriginal = (curso.horasPorMateria || {})[matId] || mat?.horas || 4;
+      if (hsAsig < hsOriginal) {
+        const falta = hsOriginal - hsAsig;
+        const candidatos = profCandidatos?.length ? profCandidatos : (prof ? [prof] : []);
+        let causa = '';
+        if (!candidatos.length) {
+          causa = '⛔ Sin profesor asignado para esta materia';
+        } else {
+          const diags = candidatos.map(p => {
+            const tieneDisp = (p.disponibilidad || defaultAvail()).some(row => row.some(v => v));
+            const hsUsadas = state.horario.filter(h => h.profesorId === p.id).length;
+            const saturado = hsUsadas >= p.maxHs;
+            if (!tieneDisp) return `${p.apellido}: sin disponibilidad cargada`;
+            if (saturado) return `${p.apellido}: límite de ${p.maxHs}h alcanzado (tiene ${hsUsadas}h asig.)`;
+            return `${p.apellido}: sin slots libres en el horario`;
+          });
+          causa = diags.join(' | ');
+        }
+        arr.push(`• ${curso.anio}°${curso.div} — ${mat?.nombre || matId}: faltan ${falta}h → ${causa}`);
       }
-      sinResolver.push(`• ${curso.anio}°${curso.div} — ${mat?.nombre || matId}: faltan ${falta}h → ${causa}`);
-    }
-  });
+    });
+    return arr;
+  }
+  sinResolver = _construirSinResolver(mejorPendientes);
 
   // ── Guardar pendientes finales reales ────────────────────────────────────
   state._ultimosPendientes = [];
@@ -4522,6 +4540,14 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
       state._ultimosPendientes = JSON.parse(JSON.stringify(prev.pendientes));
       ok                       = prev.ok;
       usandoMejorPrevio        = true;
+      // BUGFIX: 'fail' y 'sinResolver' se habían calculado ANTES de esta
+      // restauración, con los datos del intento descartado (peor). Sin este
+      // recálculo, el mensaje y el nombre sugerido para guardar mostraban un
+      // número de "faltantes" que no correspondía al horario realmente
+      // visible en pantalla (el restaurado). Se recalculan acá contra
+      // state._ultimosPendientes, que ya fue restaurado arriba.
+      fail = state._ultimosPendientes.reduce((sum, t) => sum + t.hsReq, 0);
+      sinResolver = _construirSinResolver(state._ultimosPendientes);
     }
   } else {
     // Hash distinto (datos cambiaron) o primera ejecución: guardar como nuevo mejor
