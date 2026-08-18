@@ -2381,7 +2381,7 @@ function _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS, idx = null
 // A diferencia de los swaps greedy, RESTAURA el estado si falla,
 // garantizando que no deja el horario en estado inconsistente.
 // visited: Set de IDs de entradas actualmente "en vuelo" (anti-ciclos).
-function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visited, deadline = Infinity) {
+function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visited, deadline = Infinity, idx = null) {
   if (Date.now() >= deadline) return false;
   const prof = state.profesores.find(p => p.id === profId);
   if (!prof) return false;
@@ -2392,13 +2392,19 @@ function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visite
       if (Date.now() >= deadline) return false;
       if (!avail[m]?.[d]) continue;
 
-      const clC = horario.find(h => h.cursoId === cursoId && h.dia === d && h.modulo === m);
-      const clP = horario.find(h => h.profesorId === profId && h.dia === d && h.modulo === m);
-      const hsAsig = horario.filter(h => h.profesorId === profId).length;
+      const clC = idx
+        ? idx.curso.get(`${cursoId}|${d}|${m}`)
+        : horario.find(h => h.cursoId === cursoId && h.dia === d && h.modulo === m);
+      const clP = idx
+        ? idx.prof.get(`${profId}|${d}|${m}`)
+        : horario.find(h => h.profesorId === profId && h.dia === d && h.modulo === m);
+      const hsAsig = idx
+        ? (idx.profCount.get(profId) || 0)
+        : horario.filter(h => h.profesorId === profId).length;
 
       // Caso directo: slot libre para el curso Y para el prof
-      if (!clC && !clP && hsAsig < prof.maxHs && _puedePonerProf(profId, d, m, horario)) {
-        horario.push({ id: uid(), cursoId, materiaId: matId, profesorId: profId, dia: d, modulo: m });
+      if (!clC && !clP && hsAsig < prof.maxHs && _puedePonerProf(profId, d, m, horario, idx)) {
+        _pushEntrada(horario, idx, { id: uid(), cursoId, materiaId: matId, profesorId: profId, dia: d, modulo: m });
         return true;
       }
 
@@ -2412,31 +2418,40 @@ function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visite
         if (!pB || visited.has(blocker.id)) continue;
 
         // Quitar el bloqueador del horario temporalmente
-        const idx = horario.indexOf(blocker);
-        if (idx === -1) continue;
-        horario.splice(idx, 1);
+        // (nombre "indice" a propósito: "idx" ya está tomado por el objeto índice O(1))
+        const indice = horario.indexOf(blocker);
+        if (indice === -1) continue;
+        horario.splice(indice, 1);
+        if (idx) _indiceQuitar(idx, blocker);
         const lenTras = horario.length; // longitud tras la extracción
 
         visited.add(blocker.id);
         // Intentar reubicar el bloqueador en cualquier otro slot
         const ok = _btSearch(blocker.cursoId, blocker.materiaId, pB.id,
-                              horario, MODULOS, DIAS, depth - 1, visited, deadline);
+                              horario, MODULOS, DIAS, depth - 1, visited, deadline, idx);
         visited.delete(blocker.id);
 
         if (ok) {
           // El bloqueador fue reubicado. ¿El slot (d,m) quedó libre para nosotros?
-          const c2 = horario.find(h => h.cursoId === cursoId && h.dia === d && h.modulo === m);
-          const p2 = horario.find(h => h.profesorId === profId && h.dia === d && h.modulo === m);
-          const hs2 = horario.filter(h => h.profesorId === profId).length;
-          if (!c2 && !p2 && hs2 < prof.maxHs && _puedePonerProf(profId, d, m, horario)) {
-            horario.push({ id: uid(), cursoId, materiaId: matId, profesorId: profId, dia: d, modulo: m });
+          const c2 = idx
+            ? idx.curso.get(`${cursoId}|${d}|${m}`)
+            : horario.find(h => h.cursoId === cursoId && h.dia === d && h.modulo === m);
+          const p2 = idx
+            ? idx.prof.get(`${profId}|${d}|${m}`)
+            : horario.find(h => h.profesorId === profId && h.dia === d && h.modulo === m);
+          const hs2 = idx
+            ? (idx.profCount.get(profId) || 0)
+            : horario.filter(h => h.profesorId === profId).length;
+          if (!c2 && !p2 && hs2 < prof.maxHs && _puedePonerProf(profId, d, m, horario, idx)) {
+            _pushEntrada(horario, idx, { id: uid(), cursoId, materiaId: matId, profesorId: profId, dia: d, modulo: m });
             return true;
           }
           // Slot todavía bloqueado → deshacer la reubicación del bloqueador
-          while (horario.length > lenTras) horario.pop();
+          while (horario.length > lenTras) _popEntrada(horario, idx);
         }
         // Restaurar el bloqueador en su posición original
-        horario.splice(idx, 0, blocker);
+        horario.splice(indice, 0, blocker);
+        if (idx) _indiceAgregar(idx, blocker);
       }
     }
   }
@@ -2444,15 +2459,15 @@ function _btSearch(cursoId, matId, profId, horario, MODULOS, DIAS, depth, visite
 }
 
 // Wrapper: intenta colocar cada hora faltante de cada tarea usando backtracking
-function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS, deadline = Infinity) {
+function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS, deadline = Infinity, idx = null) {
   let total = 0;
   const MAX_DEPTH = 4; // era 3 — profundidad extra encuentra cadenas más largas
   // Ordenar por menos slots posibles primero (los más difíciles primero)
   const ordenadas = [...pendientes].sort((a, b) => {
     const cA = a.profCandidatos?.length ? a.profCandidatos : (a.prof ? [a.prof] : []);
     const cB = b.profCandidatos?.length ? b.profCandidatos : (b.prof ? [b.prof] : []);
-    const sA = cA.reduce((s, p) => s + _contarSlotsPosibles(p, a.curso.id, horario, MODULOS, DIAS), 0);
-    const sB = cB.reduce((s, p) => s + _contarSlotsPosibles(p, b.curso.id, horario, MODULOS, DIAS), 0);
+    const sA = cA.reduce((s, p) => s + _contarSlotsPosibles(p, a.curso.id, horario, MODULOS, DIAS, idx), 0);
+    const sB = cB.reduce((s, p) => s + _contarSlotsPosibles(p, b.curso.id, horario, MODULOS, DIAS, idx), 0);
     return sA - sB;
   });
   for (const tarea of ordenadas) {
@@ -2465,7 +2480,7 @@ function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS, deadline =
       for (const prof of candidatos) {
         if (Date.now() >= deadline) break;
         if (_btSearch(tarea.curso.id, tarea.matId, prof.id,
-                      horario, MODULOS, DIAS, MAX_DEPTH, new Set(), deadline)) {
+                      horario, MODULOS, DIAS, MAX_DEPTH, new Set(), deadline, idx)) {
           placed = true;
           break;
         }
@@ -2480,10 +2495,9 @@ function _intentarBacktrackTareas(pendientes, horario, MODULOS, DIAS, deadline =
 function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS, deadline = Infinity) {
   let totalResueltos = 0;
   // Índice O(1) sincronizado durante toda la fase de swaps (Fase 2 de
-  // optimización). _intentarBacktrackTareas/_btSearch todavía no están
-  // migrados a índice, así que tras usarlos se reconstruye desde horario
-  // para no arrastrar un índice desincronizado (rebuild es O(n) pero solo
-  // ocurre en el camino de último recurso, cuando r===0).
+  // optimización). Desde la migración de _intentarBacktrackTareas/_btSearch
+  // al índice O(1), ya no hace falta reconstruirlo tras usarlas: mantienen
+  // `idx` sincronizado internamente vía _pushEntrada/_popEntrada/_indice*.
   let idx = _crearIndice(horario);
   // Trabajar sobre copia mutable de pendientes para actualizar hsReq dinámicamente
   const pendientes = pendientesInic.map(t => ({ ...t }));
@@ -2516,13 +2530,12 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS, deadline = Infin
       if (r === 0) r = _intentarReasignacionProfesor(tarea, horario, MODULOS, DIAS, idx);
       // 5) Backtracking profundidad 3: busca cadenas de 3 movimientos que
       //    los swaps greedy no detectan por orden aleatoria o profundidad limitada
-      //    (no usa índice todavía → resincronizar si movió algo)
+      //    (usa el mismo índice O(1) `idx`, que queda sincronizado automáticamente)
       //    Se le pasa el deadline global para que no cuelgue la generación:
       //    la recursión de _btSearch puede explotar combinatoriamente con
       //    muchos profesores/materias candidatas.
       if (r === 0) {
-        r = _intentarBacktrackTareas([tarea], horario, MODULOS, DIAS, deadline);
-        if (r > 0) idx = _crearIndice(horario);
+        r = _intentarBacktrackTareas([tarea], horario, MODULOS, DIAS, deadline, idx);
       }
       tarea.hsReq -= r;
       resueltoEstaRonda += r;
@@ -4342,11 +4355,14 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
   // No toca el horario en bloque — opera slot a slot, sin riesgo de regresión.
   if (mejorPendientes.length > 0 && mejorPendientes.length <= 15 && Date.now() < _genDeadline) {
     const MAX_DEPTH_FINAL = 5;
+    // Índice O(1) para esta fase: _btSearch lo mantiene sincronizado
+    // internamente aunque mueva/restaure bloqueadores durante la recursión.
+    const idx5 = _crearIndice(state.horario);
     const pendOrdenadas = [...mejorPendientes].sort((a, b) => {
       const cA = a.profCandidatos?.length ? a.profCandidatos : (a.prof ? [a.prof] : []);
       const cB = b.profCandidatos?.length ? b.profCandidatos : (b.prof ? [b.prof] : []);
-      const sA = cA.reduce((s, p) => s + _contarSlotsPosibles(p, a.curso.id, state.horario, MODULOS, DIAS), 0);
-      const sB = cB.reduce((s, p) => s + _contarSlotsPosibles(p, b.curso.id, state.horario, MODULOS, DIAS), 0);
+      const sA = cA.reduce((s, p) => s + _contarSlotsPosibles(p, a.curso.id, state.horario, MODULOS, DIAS, idx5), 0);
+      const sB = cB.reduce((s, p) => s + _contarSlotsPosibles(p, b.curso.id, state.horario, MODULOS, DIAS, idx5), 0);
       return sA - sB;
     });
     let resueltosBT5 = 0;
@@ -4360,7 +4376,7 @@ function _ejecutarAutoGenerar(conForzado, ignorarConsec) {
         for (const prof of candidatos) {
           if (Date.now() >= _genDeadline) break;
           if (_btSearch(tarea.curso.id, tarea.matId, prof.id,
-                        state.horario, MODULOS, DIAS, MAX_DEPTH_FINAL, new Set(), _genDeadline)) {
+                        state.horario, MODULOS, DIAS, MAX_DEPTH_FINAL, new Set(), _genDeadline, idx5)) {
             placed = true;
             break;
           }
