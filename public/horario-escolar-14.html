@@ -2782,8 +2782,39 @@ function _asignarForzado(pendientes, horario, MODULOS, DIAS, deadline = Infinity
 function _minConflictsHillClimbing(pendientes, horario, MODULOS, DIAS, deadline = Infinity) {
   if (!pendientes.length) return 0;
 
+  // ── Índice liviano propio de esta fase ────────────────────────────────
+  // A diferencia del índice general (_crearIndice), acá interesa justamente
+  // CONTAR choques (varias entradas en el mismo profId|dia|modulo), así que
+  // slotProfCount guarda un contador en vez de una sola entrada. slotCurso
+  // sí es de valor único (el curso nunca tiene doble-booking, se garantiza
+  // por construcción al elegir dónde forzar/mover cada clase).
+  const profMap = new Map(state.profesores.map(p => [p.id, p]));
+  const keyPDM = (profId, d, m) => `${profId}|${d}|${m}`;
+  const keyCDM = (cursoId, d, m) => `${cursoId}|${d}|${m}`;
+  const slotProfCount = new Map();
+  const slotCurso = new Map();
+  horario.forEach(h => {
+    const kP = keyPDM(h.profesorId, h.dia, h.modulo);
+    slotProfCount.set(kP, (slotProfCount.get(kP) || 0) + 1);
+    slotCurso.set(keyCDM(h.cursoId, h.dia, h.modulo), h);
+  });
+
+  // Conflictos que tiene (o tendría) el profesor `profId` en (d, m), leídos
+  // directamente del índice — sin recorrer el horario. `excluirSelf=true`
+  // cuando la propia entrada evaluada ya está contada en esa posición.
+  function conflictosEnPos(profId, d, m, excluirSelf) {
+    let c = (slotProfCount.get(keyPDM(profId, d, m)) || 0) - (excluirSelf ? 1 : 0);
+    const prof = profMap.get(profId);
+    if (prof) {
+      const avail = prof.disponibilidad || defaultAvail();
+      if (!avail[m]?.[d]) c += 2;
+    }
+    return c;
+  }
+
   // ── Paso 1: Forzar asignación en cualquier slot libre del curso ──────
   const idsAgregados = new Set();
+  const forzadas = [];
   pendientes.forEach(({ curso, matId, profCandidatos, prof: profP, hsReq }) => {
     const candidatos = profCandidatos?.length ? profCandidatos : (profP ? [profP] : []);
     if (!candidatos.length) return;
@@ -2799,73 +2830,77 @@ function _minConflictsHillClimbing(pendientes, horario, MODULOS, DIAS, deadline 
     // del curso, pero el prof puede tener conflicto → se resuelve en paso 2
     for (let m = 0; m < MODULOS.length && placed < hsReq; m++) {
       for (let d = 0; d < DIAS.length && placed < hsReq; d++) {
-        if (horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m)) continue;
+        if (slotCurso.has(keyCDM(curso.id, d, m))) continue;
         const id = uid();
-        horario.push({ id, cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m });
+        const entrada = { id, cursoId: curso.id, materiaId: matId, profesorId: prof.id, dia: d, modulo: m };
+        horario.push(entrada);
         idsAgregados.add(id);
+        forzadas.push(entrada);
+        slotCurso.set(keyCDM(curso.id, d, m), entrada);
+        const kP = keyPDM(prof.id, d, m);
+        slotProfCount.set(kP, (slotProfCount.get(kP) || 0) + 1);
         placed++;
       }
     }
   });
   if (!idsAgregados.size) return 0;
 
-  // ── Función de conflictos para una entrada individual ────────────────
-  function conflictosEntrada(e, h) {
-    let c = 0;
-    // Doble asignación del prof en el mismo slot (otro curso u otra entrada forzada)
-    c += h.filter(x => x !== e && x.profesorId === e.profesorId
-                     && x.dia === e.dia && x.modulo === e.modulo).length;
-    // Fuera de disponibilidad declarada (peso doble: restricción del profesor)
-    const prof = state.profesores.find(p => p.id === e.profesorId);
-    if (prof) {
-      const avail = prof.disponibilidad || defaultAvail();
-      if (!avail[e.modulo]?.[e.dia]) c += 2;
-    }
-    return c;
-  }
-
-  // ── Paso 2: Hill Climbing — 5000 iteraciones, solo acepta mejoras ────
+  // ── Paso 2: Hill Climbing — solo acepta mejoras ────
   const MAX_HC_ITER = 2500;
-  // Sólo se mueven las clases FORZADAS; el horario válido previo nunca se toca.
-  // Al moverse dentro de los slots libres del curso, nunca se introduce
-  // doble-booking del curso (invariante garantizado por la condición del filtro).
+  // Sólo se mueven las clases FORZADAS (`forzadas`); el horario válido previo
+  // nunca se toca. Al moverse dentro de los slots libres del curso, nunca se
+  // introduce doble-booking del curso (invariante garantizado por slotCurso).
   for (let iter = 0; iter < MAX_HC_ITER; iter++) {
     if (Date.now() >= deadline) break;
-    // Seleccionar aleatoriamente una clase forzada con conflictos
-    const conflictivas = horario.filter(e => idsAgregados.has(e.id) && conflictosEntrada(e, horario) > 0);
+    // Seleccionar aleatoriamente una clase forzada con conflictos.
+    // Antes: horario.filter(...) recorriendo TODO el horario en cada
+    // iteración. Ahora: solo se recorren las `forzadas` (las únicas que
+    // pueden tener conflictos) y el conteo sale del índice, no de un scan.
+    const conflictivas = forzadas.filter(e =>
+      conflictosEnPos(e.profesorId, e.dia, e.modulo, true) > 0);
     if (!conflictivas.length) break;
     const entrada = conflictivas[Math.floor(Math.random() * conflictivas.length)];
 
     const oldDia = entrada.dia;
     const oldMod = entrada.modulo;
-    const conflAntes = conflictosEntrada(entrada, horario);
+    const conflAntes = conflictosEnPos(entrada.profesorId, oldDia, oldMod, true);
     let mejorDia = -1, mejorMod = -1, mejorDelta = 0;
 
-    // Evaluar todos los slots libres del curso como destino potencial
+    // Evaluar todos los slots libres del curso como destino potencial.
+    // Antes: cada evaluación movía la entrada de verdad y recalculaba
+    // conflictos con un scan O(n) del horario, y después la restauraba.
+    // Ahora: el delta sale del índice sin tocar la entrada ni el horario.
     for (let m = 0; m < MODULOS.length; m++) {
       for (let d = 0; d < DIAS.length; d++) {
         if (m === oldMod && d === oldDia) continue;
         // El curso no debe tener otra clase en el slot destino
-        if (horario.some(x => x !== entrada && x.cursoId === entrada.cursoId
-                           && x.dia === d && x.modulo === m)) continue;
-        // Calcular delta de conflictos de forma incremental (mover tentativo)
-        entrada.dia = d; entrada.modulo = m;
-        const conflDespues = conflictosEntrada(entrada, horario);
+        const ocupante = slotCurso.get(keyCDM(entrada.cursoId, d, m));
+        if (ocupante && ocupante !== entrada) continue;
+        const conflDespues = conflictosEnPos(entrada.profesorId, d, m, false);
         const delta = conflDespues - conflAntes;
         if (delta < mejorDelta) { mejorDelta = delta; mejorDia = d; mejorMod = m; }
-        // Restaurar
-        entrada.dia = oldDia; entrada.modulo = oldMod;
       }
     }
 
-    // Solo aplicar si el movimiento reduce conflictos (hill climbing puro)
-    if (mejorDia !== -1) { entrada.dia = mejorDia; entrada.modulo = mejorMod; }
+    // Solo aplicar si el movimiento reduce conflictos (hill climbing puro),
+    // sincronizando el índice liviano con la nueva posición.
+    if (mejorDia !== -1) {
+      const kOld = keyPDM(entrada.profesorId, oldDia, oldMod);
+      slotProfCount.set(kOld, (slotProfCount.get(kOld) || 1) - 1);
+      slotCurso.delete(keyCDM(entrada.cursoId, oldDia, oldMod));
+
+      entrada.dia = mejorDia; entrada.modulo = mejorMod;
+
+      const kNew = keyPDM(entrada.profesorId, mejorDia, mejorMod);
+      slotProfCount.set(kNew, (slotProfCount.get(kNew) || 0) + 1);
+      slotCurso.set(keyCDM(entrada.cursoId, mejorDia, mejorMod), entrada);
+    }
   }
 
   // ── Paso 3: Limpiar entradas forzadas que aún tienen conflictos ──────
   const aDescartar = new Set(
-    horario
-      .filter(e => idsAgregados.has(e.id) && conflictosEntrada(e, horario) > 0)
+    forzadas
+      .filter(e => conflictosEnPos(e.profesorId, e.dia, e.modulo, true) > 0)
       .map(e => e.id)
   );
   for (let i = horario.length - 1; i >= 0; i--) {
