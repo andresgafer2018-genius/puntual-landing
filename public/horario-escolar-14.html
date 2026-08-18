@@ -2694,6 +2694,9 @@ function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS, deadl
 // Devuelve array con datos completos para el reporte de negociación.
 function _asignarForzado(pendientes, horario, MODULOS, DIAS, deadline = Infinity) {
   const resultado = [];
+  // Índice O(1): esta fase solo agrega entradas (nunca mueve ni quita), así
+  // que encaja directo con el índice general vía _pushEntrada.
+  const idx = _crearIndice(horario);
 
   for (const { curso, matId, prof, profCandidatos, hsReq } of pendientes) {
     if (Date.now() >= deadline) break;
@@ -2709,7 +2712,7 @@ function _asignarForzado(pendientes, horario, MODULOS, DIAS, deadline = Infinity
 
       for (const candidato of candidatos) {
         const avail    = candidato.disponibilidad || defaultAvail();
-        const hsUsadas = horario.filter(h => h.profesorId === candidato.id).length;
+        const hsUsadas = idx.profCount.get(candidato.id) || 0;
 
         // Días en que el prof normalmente tiene disponibilidad
         const diasNormales = new Set();
@@ -2718,9 +2721,9 @@ function _asignarForzado(pendientes, horario, MODULOS, DIAS, deadline = Infinity
         for (let d = 0; d < DIAS.length; d++) {
           for (let m = 0; m < MODULOS.length; m++) {
             // El slot del curso debe estar libre
-            if (horario.some(h => h.cursoId === curso.id && h.dia === d && h.modulo === m)) continue;
+            if (idx.curso.has(`${curso.id}|${d}|${m}`)) continue;
             // El prof no puede estar doble-asignado en ese slot
-            if (horario.some(h => h.profesorId === candidato.id && h.dia === d && h.modulo === m)) continue;
+            if (idx.prof.has(`${candidato.id}|${d}|${m}`)) continue;
 
             const disponible  = m < avail.length && d < (avail[m] || []).length && avail[m][d];
             const exceedsMax  = hsUsadas >= candidato.maxHs;
@@ -2770,7 +2773,7 @@ function _asignarForzado(pendientes, horario, MODULOS, DIAS, deadline = Infinity
         id: uid(), cursoId: curso.id, materiaId: matId,
         profesorId: candidato.id, dia: d, modulo: m, forzado: true
       };
-      horario.push(entrada);
+      _pushEntrada(horario, idx, entrada);
       resultado.push({ entrada, prof: candidato, curso, mat, violaciones, minutos, diasNormales });
       placed++;
     }
