@@ -1826,6 +1826,7 @@ function _crearIndice(horario) {
     profDia: new Map(),      // "profId|dia" -> Set(modulos)
     cursoMat: new Map(),     // "cursoId|matId" -> horas asignadas
     profEntradas: new Map(), // profId -> Set(entrada)  [Fase 2: swaps]
+    cursoEntradas: new Map(),// cursoId -> Set(entrada) [Fase 6: LNS scoring]
   };
   for (const h of horario) _indiceAgregar(idx, h);
   return idx;
@@ -1842,6 +1843,8 @@ function _indiceAgregar(idx, h) {
   idx.cursoMat.set(kCM, (idx.cursoMat.get(kCM) || 0) + 1);
   if (!idx.profEntradas.has(h.profesorId)) idx.profEntradas.set(h.profesorId, new Set());
   idx.profEntradas.get(h.profesorId).add(h);
+  if (!idx.cursoEntradas.has(h.cursoId)) idx.cursoEntradas.set(h.cursoId, new Set());
+  idx.cursoEntradas.get(h.cursoId).add(h);
 }
 
 function _indiceQuitar(idx, h) {
@@ -1857,6 +1860,8 @@ function _indiceQuitar(idx, h) {
   if (cCM <= 0) idx.cursoMat.delete(kCM); else idx.cursoMat.set(kCM, cCM);
   const setPE = idx.profEntradas.get(h.profesorId);
   if (setPE) { setPE.delete(h); if (setPE.size === 0) idx.profEntradas.delete(h.profesorId); }
+  const setCE = idx.cursoEntradas.get(h.cursoId);
+  if (setCE) { setCE.delete(h); if (setCE.size === 0) idx.cursoEntradas.delete(h.cursoId); }
 }
 
 /** Empuja una entrada al horario y (si hay índice) lo mantiene sincronizado */
@@ -2581,18 +2586,35 @@ function _intentarSwaps(pendientesInic, horario, MODULOS, DIAS, deadline = Infin
 function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS, deadline = Infinity) {
   if (!pendientes.length || !horario.length) return null;
 
-  // 1. Scoring: cuántas tareas pendientes bloquea cada entrada asignada
+  // Índice O(1) construido una sola vez: se usa para el scoring de bloqueo
+  // (profEntradas/cursoEntradas) y no se muta (cada iteración del LNS arma
+  // su propio horarioIntento nuevo, que _pasadaAsignacion indexa por su cuenta).
+  const idx = _crearIndice(horario);
+
+  // Mapa "cursoId|matId" -> tarea original, para no hacer .find() sobre
+  // todasLasTareas (hasta ~400 elementos) por cada entrada liberada en cada
+  // una de las MAX_LNS_T rondas.
+  const tk = (cId, mId) => `${cId}|${mId}`;
+  const tareaPorClave = new Map(todasLasTareas.map(t => [tk(t.curso.id, t.matId), t]));
+
+  // 1. Scoring: cuántas tareas pendientes bloquea cada entrada asignada.
+  // En vez de recorrer TODO el horario por cada tarea pendiente, se toman
+  // directamente las entradas de sus profesores candidatos (profEntradas)
+  // y las de su curso (cursoEntradas) — el resto del horario no puede
+  // bloquear a esa tarea, así que ni se mira.
   const scoreMap = new Map();
   horario.forEach(h => scoreMap.set(h.id, 0));
 
   pendientes.forEach(t => {
-    const candIds = new Set(
-      (t.profCandidatos?.length ? t.profCandidatos : (t.prof ? [t.prof] : [])).map(p => p.id)
-    );
-    horario.forEach(h => {
-      if (candIds.has(h.profesorId) || h.cursoId === t.curso.id)
-        scoreMap.set(h.id, scoreMap.get(h.id) + 1);
+    const candidatos = t.profCandidatos?.length ? t.profCandidatos : (t.prof ? [t.prof] : []);
+    const bloqueantes = new Set();
+    candidatos.forEach(p => {
+      const set = idx.profEntradas.get(p.id);
+      if (set) set.forEach(h => bloqueantes.add(h));
     });
+    const setCurso = idx.cursoEntradas.get(t.curso.id);
+    if (setCurso) setCurso.forEach(h => bloqueantes.add(h));
+    bloqueantes.forEach(h => scoreMap.set(h.id, scoreMap.get(h.id) + 1));
   });
 
   const candidatasALiberar = [...horario]
@@ -2622,10 +2644,9 @@ function _lnsTargetado(pendientes, horario, todasLasTareas, MODULOS, DIAS, deadl
 
     // 3. Convertir entradas liberadas → tareas
     const taskMap = new Map();
-    const tk = (cId, mId) => `${cId}|${mId}`;
 
     aLiberar.forEach(h => {
-      const orig = todasLasTareas.find(t => t.curso.id === h.cursoId && t.matId === h.materiaId);
+      const orig = tareaPorClave.get(tk(h.cursoId, h.materiaId));
       if (!orig) return;
       const k = tk(h.cursoId, h.materiaId);
       if (taskMap.has(k)) taskMap.get(k).hsReq++;
