@@ -1,15 +1,17 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 function PlanesContent() {
   const searchParams = useSearchParams();
-  const motivo = searchParams.get("motivo");
-  const pago   = searchParams.get("pago");
+  const motivo   = searchParams.get("motivo");
+  const pago     = searchParams.get("pago");
+  const autopago = searchParams.get("autopago");
   const [loadingPlan, setLoadingPlan]   = useState<string | null>(null);
   const [tipoCambio, setTipoCambio]     = useState<number | null>(null);
+  const autopagoDisparado = useRef(false);
 
   useEffect(() => {
     fetch("https://dolarapi.com/v1/dolares/oficial")
@@ -28,7 +30,9 @@ function PlanesContent() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        window.location.href = "/login";
+        // No hay sesión activa: mandamos a login guardando qué plan quería
+        // contratar, para volver acá y disparar el pago automáticamente.
+        window.location.href = `/login?redirect=planes&plan=${encodeURIComponent(planId)}`;
         return;
       }
 
@@ -51,6 +55,16 @@ function PlanesContent() {
       setLoadingPlan(null);
     }
   }
+
+  // Si volvimos de /login con ?autopago=planId, significa que el usuario
+  // ya está logueado y quería contratar ese plan: seguimos el flujo solo.
+  useEffect(() => {
+    if (autopago && !autopagoDisparado.current) {
+      autopagoDisparado.current = true;
+      handlePago(autopago);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autopago]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#0c0f1a", fontFamily: "'DM Sans', sans-serif", color: "#e8eaf2", padding: "24px" }}>
@@ -86,6 +100,11 @@ function PlanesContent() {
         {motivo === "vencido" && (
           <div style={{ background: "rgba(247,79,106,.12)", border: "1px solid rgba(247,79,106,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#f74f6a", textAlign: "center" }}>
             ⏰ Tu período de acceso venció. Elegí un plan para seguir usando Puntual.
+          </div>
+        )}
+        {autopago && (
+          <div style={{ background: "rgba(79,142,247,.12)", border: "1px solid rgba(79,142,247,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#4f8ef7", textAlign: "center" }}>
+            🔐 ¡Listo, ya iniciaste sesión! Te estamos redirigiendo a MercadoPago para completar la compra...
           </div>
         )}
         {pago === "exitoso" && (
