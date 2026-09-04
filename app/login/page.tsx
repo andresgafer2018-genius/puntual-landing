@@ -25,6 +25,11 @@ function LoginContent() {
   const [showLoginPass, setShowLoginPass] = useState(false);
   const [showRegPass, setShowRegPass] = useState(false);
 
+  // Si venimos de /planes porque el usuario quiso contratar un plan sin
+  // estar logueado, estos parámetros nos dicen a qué plan volver después.
+  const redirectTo = searchParams.get("redirect");
+  const planPendiente = searchParams.get("plan");
+
   useEffect(() => {
     const msg = searchParams.get("msg");
     const tabParam = searchParams.get("tab");
@@ -36,11 +41,15 @@ function LoginContent() {
       setError("El link de confirmación no es válido o ya expiró. Intentá iniciar sesión o registrarte de nuevo.");
     } else if (tabParam === "registro") {
       setTab("registro");
+    } else if (redirectTo === "planes" && planPendiente) {
+      setTab("login");
+      setSuccess("Iniciá sesión para continuar con la compra de tu plan.");
     }
     // Limpiar el hash que Supabase agrega (#error=access_denied&...) para que no interfiera
     if (window.location.hash) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   async function handleLogin(e: React.FormEvent) {
@@ -56,6 +65,13 @@ function LoginContent() {
     if (authError) {
       setLoading(false);
       setError("Email o contraseña incorrectos.");
+      return;
+    }
+
+    // Si veníamos de /planes con un plan pendiente, volvemos ahí para
+    // que el pago se dispare solo en lugar de perder la selección.
+    if (redirectTo === "planes" && planPendiente) {
+      window.location.href = `/planes?autopago=${encodeURIComponent(planPendiente)}`;
       return;
     }
 
