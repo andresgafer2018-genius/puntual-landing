@@ -414,6 +414,7 @@ tr:hover td { background:rgba(79,142,247,.04); }
 }
 </style>
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -1283,6 +1284,7 @@ function saveProfesor() {
   const apellido = document.getElementById('profApellido').value.trim();
   if (!nombre || !apellido) return alert('Nombre y apellido son requeridos');
   const editId = document.getElementById('profEditId').value || null;
+  if (!editId && typeof checkLimitePlan === 'function' && !checkLimitePlan('profesores')) return;
   const materias = Array.from(document.querySelectorAll('#profMateriaCheck input:checked')).map(i=>i.value);
   const obj = {
     id: editId || uid(),
@@ -1525,6 +1527,7 @@ function saveCurso() {
   const editId = document.getElementById('curEditId').value || null;
   if (state.cursos.some(c => c.anio===anio && c.div===div && c.id!==editId))
     return alert('Ya existe ese curso ('+anio+'° '+div+'). Si querés agregar materias, usá el botón ✏️ para editar el curso existente.');
+  if (!editId && typeof checkLimitePlan === 'function' && !checkLimitePlan('cursos')) return;
   const materias = [];
   const horasPorMateria = {};
   const profesorPorMateria = {};
@@ -6571,6 +6574,43 @@ function exportarJSON() {
   a.download='horario-escolar.json'; a.click();
 }
 
+// ── Exportaciones por separado en JSON (solo admin) ──────────────────
+// Cada archivo se puede volver a importar con el botón "Importar":
+// handleImport hace Object.assign(state, d), así que reemplaza solo
+// la parte exportada (profesores, materias o cursos) sin tocar el resto.
+function _soloAdmin() {
+  const u = state.user;
+  if (u && (u.esAdmin || u.plan === 'admin')) return true;
+  alert('⚠️ La exportación de datos está disponible solo en modo administrador.');
+  return false;
+}
+function _descargarJSON(nombre, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = nombre; a.click();
+  URL.revokeObjectURL(a.href);
+}
+function exportarProfesores() {
+  if (!_soloAdmin()) return;
+  if (!state.profesores.length) return alert('No hay profesores cargados.');
+  _descargarJSON('puntual-profesores.json', { profesores: state.profesores });
+}
+function exportarMaterias() {
+  if (!_soloAdmin()) return;
+  if (!state.materias.length) return alert('No hay materias cargadas.');
+  _descargarJSON('puntual-materias.json', { materias: state.materias });
+}
+function exportarCargaHoraria() {
+  if (!_soloAdmin()) return;
+  if (!state.cursos.length) return alert('No hay cursos cargados.');
+  _descargarJSON('puntual-carga-horaria.json', { cursos: state.cursos });
+}
+function exportarConfig() {
+  if (!_soloAdmin()) return;
+  if (!state.config) return alert('No hay configuración cargada.');
+  _descargarJSON('puntual-config.json', { config: state.config });
+}
+
 function importarJSON() { document.getElementById('importFile').click(); }
 function handleImport(e) {
   const f = e.target.files[0]; if (!f) return;
@@ -6829,11 +6869,162 @@ function saveConfig() {
 }
 
 // ═══════════════════════════════════
+//  PLAN ENFORCEMENT (Opción A: lectura única al cargar)
+// ═══════════════════════════════════
+const SUPABASE_URL  = 'https://ictemkwmsqgktpxvvxjg.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_dD9nCSBl1xsl9rckxvfbMA_HmukQoBc';
+const LIMITES_TRIAL = { cursos: 5, profesores: 15 };
+
+// Emails con acceso total de administrador (sin limites, sin vencimiento)
+const ADMIN_EMAILS = ['andresgafer2018@gmail.com']; // todo en minuscula
+
+const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Inicializa state.user con datos del plan leídos de Supabase.
+// Si no hay sesión → redirige a /login.
+// Si plan está vencido y no es 'paid' → banner + redirige a /planes.
+async function initPlan() {
+  const { data: { session } } = await _sb.auth.getSession();
+  if (!session) {
+    window.location.href = '/login';
+    return false;
+  }
+
+  // -- Modo administrador: acceso total, sin tocar la tabla escuelas --
+  const _email = (session.user.email || '').toLowerCase();
+  if (ADMIN_EMAILS.includes(_email)) {
+    state.user = {
+      id: session.user.id,
+      email: session.user.email,
+      plan: 'admin',
+      esAdmin: true,
+      plan_vence: null,
+      vencido: false,
+    };
+    _pintarBanner('🛠️ Modo administrador — acceso total, sin limites',
+      '#DBEAFE', '#1E40AF', null, null);
+    return true;
+  }
+
+  const { data: escuela, error } = await _sb
+    .from('escuelas')
+    .select('id, nombre, plan, plan_inicio, plan_vence, trial_usado')
+    .eq('owner_id', session.user.id)
+    .maybeSingle();
+
+  if (error || !escuela) {
+    console.warn('No se pudo leer la escuela del usuario:', error);
+    // Fallback seguro: tratarlo como trial sin fecha (aplican límites)
+    state.user = {
+      id: session.user.id,
+      email: session.user.email,
+      plan: 'free',
+      plan_vence: null,
+      vencido: false,
+    };
+    renderBannerPlan();
+    return true;
+  }
+
+  const hoy = new Date();
+  const vence = escuela.plan_vence ? new Date(escuela.plan_vence) : null;
+  const vencido = vence ? (vence < hoy) : false;
+  const esPago = escuela.plan === 'paid';
+
+  state.user = {
+    id: session.user.id,
+    email: session.user.email,
+    escuelaId: escuela.id,
+    plan: escuela.plan || 'free',
+    plan_vence: escuela.plan_vence,
+    vencido: vencido && !esPago,
+  };
+
+  // Plan vencido y no es paid → banner + redirect
+  if (vencido && !esPago) {
+    mostrarBannerVencido();
+    setTimeout(() => { window.location.href = '/planes'; }, 2500);
+    return false;
+  }
+
+  renderBannerPlan();
+  return true;
+}
+
+// Banner según el estado del plan
+function renderBannerPlan() {
+  const u = state.user;
+  if (!u) return;
+if (u.plan === 'paid' && !u.vencido) return; // paid vigente → sin banner
+
+  const vence = u.plan_vence ? new Date(u.plan_vence) : null;
+  const hoy = new Date();
+  let diasRestantes = null;
+  if (vence) {
+    diasRestantes = Math.ceil((vence - hoy) / (1000 * 60 * 60 * 24));
+  }
+
+  const msg = diasRestantes !== null
+    ? `🎁 Plan de prueba — te quedan ${diasRestantes} día${diasRestantes === 1 ? '' : 's'} · Límites: ${LIMITES_TRIAL.cursos} cursos y ${LIMITES_TRIAL.profesores} profesores`
+    : `🎁 Plan de prueba — Límites: ${LIMITES_TRIAL.cursos} cursos y ${LIMITES_TRIAL.profesores} profesores`;
+
+  _pintarBanner(msg, '#FEF3C7', '#92400E', '/planes', 'Pasar a plan pago →');
+}
+
+function mostrarBannerVencido() {
+  _pintarBanner(
+    '⚠️ Tu plan venció. Redirigiéndote a la página de planes…',
+    '#FEE2E2', '#991B1B', null, null
+  );
+}
+
+function _pintarBanner(texto, bg, color, href, cta) {
+  let el = document.getElementById('planBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'planBanner';
+    el.style.cssText = 'position:sticky;top:0;z-index:200;padding:10px 18px;' +
+      'font-family:DM Sans,sans-serif;font-size:13px;font-weight:500;' +
+      'display:flex;align-items:center;justify-content:center;gap:14px;';
+    document.body.insertBefore(el, document.body.firstChild);
+  }
+  el.style.background = bg;
+  el.style.color = color;
+  el.innerHTML = `<span>${texto}</span>` +
+    (href && cta ? ` <a href="${href}" style="color:${color};text-decoration:underline;font-weight:600;">${cta}</a>` : '');
+}
+
+// Gate llamado desde saveCurso / saveProfesor antes de agregar
+// Devuelve true si se puede agregar, false si se bloquea (y avisa al usuario)
+function checkLimitePlan(tipo) {
+  const u = state.user;
+  if (!u) return true;              // sin datos de plan → no bloquear (fallback)
+  if (u.esAdmin || u.plan === 'admin') return true; // admin → sin límites
+  if (u.plan === 'paid') return true; // pago → sin límites
+
+  const actual = tipo === 'cursos' ? state.cursos.length : state.profesores.length;
+  const limite = LIMITES_TRIAL[tipo];
+
+  if (actual >= limite) {
+    alert(
+      `Límite del plan de prueba alcanzado: ${limite} ${tipo}.\n\n` +
+      `Para agregar más, pasate al plan pago desde /planes.`
+    );
+    return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════
 //  INIT
 // ═══════════════════════════════════
-loadLocal();
-renderDashboard();
-updateBadges();
+(async () => {
+  const ok = await initPlan();
+  if (!ok) return; // sin sesión o plan vencido: ya se redirigió
+  loadLocal();
+  renderDashboard();
+  updateBadges();
+})();
 
 // Guardar síncronamente antes de cerrar/recargar la pestaña
 window.addEventListener('beforeunload', () => {
