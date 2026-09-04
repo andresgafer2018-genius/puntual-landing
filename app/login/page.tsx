@@ -43,7 +43,7 @@ function LoginContent() {
       setTab("registro");
     } else if (redirectTo === "planes" && planPendiente) {
       setTab("login");
-      setSuccess("Iniciá sesión para continuar con la compra de tu plan.");
+      setSuccess("Inicia sesión o crea una cuenta para continuar con la compra de tu plan.");
     }
     // Limpiar el hash que Supabase agrega (#error=access_denied&...) para que no interfiera
     if (window.location.hash) {
