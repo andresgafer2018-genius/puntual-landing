@@ -29,7 +29,6 @@ export default function PuntualWidget() {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [showBadge, setShowBadge] = useState(false);
-  const [showQuick, setShowQuick] = useState(true);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -81,7 +80,6 @@ export default function PuntualWidget() {
     const msg = text || input.trim();
     if (!msg || typing) return;
     setInput("");
-    setShowQuick(false);
     setMessages((m) => [...m, { role: "user", html: msg }]);
     answer(msg);
   }
@@ -151,13 +149,13 @@ export default function PuntualWidget() {
               type="text" placeholder="Tu nombre" value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && startChat()}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid #D3D1C7", fontSize: 14, outline: "none" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid #D3D1C7", fontSize: 14, outline: "none", background: "#fff", color: "#2C2C2A" }}
             />
             <input
               type="email" placeholder="Tu email (opcional)" value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && startChat()}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid #D3D1C7", fontSize: 14, outline: "none" }}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1.5px solid #D3D1C7", fontSize: 14, outline: "none", background: "#fff", color: "#2C2C2A" }}
             />
             <button
               onClick={() => startChat()}
@@ -206,15 +204,13 @@ export default function PuntualWidget() {
             </div>
 
             {/* Quick replies */}
-            {showQuick && (
-              <div style={{ padding: "6px 14px", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 }}>
-                {QUICK_REPLIES.map((q) => (
-                  <button key={q} onClick={() => send(q)} style={{ padding: "5px 10px", borderRadius: 20, fontSize: 11.5, border: "1.5px solid #7F77DD", color: "#534AB7", background: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div style={{ padding: "6px 14px", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 }}>
+              {QUICK_REPLIES.map((q) => (
+                <button key={q} onClick={() => send(q)} style={{ padding: "5px 10px", borderRadius: 20, fontSize: 11.5, border: "1.5px solid #7F77DD", color: "#534AB7", background: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {q}
+                </button>
+              ))}
+            </div>
 
             {/* Input */}
             <div style={{ display: "flex", gap: 8, padding: "10px 12px 14px", borderTop: "1px solid #F1EFE8", flexShrink: 0 }}>
@@ -223,7 +219,7 @@ export default function PuntualWidget() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
                 placeholder="Escribí tu consulta…"
-                style={{ flex: 1, padding: "9px 13px", borderRadius: 22, fontSize: 13, border: "1.5px solid #D3D1C7", outline: "none" }}
+                style={{ flex: 1, padding: "9px 13px", borderRadius: 22, fontSize: 13, border: "1.5px solid #D3D1C7", outline: "none", background: "#fff", color: "#2C2C2A" }}
               />
               <button onClick={() => send()} style={{ width: 38, height: 38, borderRadius: "50%", background: "#534AB7", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
