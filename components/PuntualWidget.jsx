@@ -2,45 +2,23 @@
 
 import { useState, useRef, useEffect } from "react";
 
-const SYSTEM_PROMPT = `Sos el agente de ventas oficial de "Puntual", una app web argentina que genera horarios escolares automáticamente. Tu objetivo es convertir interesados en clientes con un tono comercial, cálido y directo.
+const CONTACT_EMAIL = "puntualhorarios@gmail.com";
 
-SOBRE PUNTUAL:
-Sitio: https://puntual-landing.vercel.app
-Resuelve el dolor de armar horarios a mano: tarda días, genera conflictos y es un caos cada inicio de ciclo. Con Puntual se genera en minutos, sin conflictos, con total flexibilidad.
+// Respuestas fijas para las 4 preguntas rápidas — no requieren IA ni API key.
+const RESPUESTAS = {
+  "¿Qué es Puntual?":
+    "Puntual es una app web argentina que genera horarios escolares automáticamente: sin conflictos de aulas, docentes ni materias, en minutos en vez de días. Sirve para primaria, secundaria y terciaria.",
+  "Planes y precios":
+    "Tenemos 3 opciones: <strong>Prueba gratuita</strong> ($0, 15 días, hasta 5 cursos y 15 docentes), <strong>Plan Estándar</strong> (USD 99/mes, hasta 12 cursos y docentes ilimitados) y <strong>Plan Completo</strong> (USD 119/mes, cursos y docentes ilimitados).",
+  "Prueba gratuita":
+    "La prueba gratuita dura 15 días, no pide tarjeta de crédito, y te deja cargar hasta 5 cursos y 15 docentes para que conozcas la plataforma con tus propios datos.",
+  "¿Cómo empiezo?":
+    'Es simple: entrá a <a href="https://puntual-landing.vercel.app/login" target="_blank" rel="noopener noreferrer" style="color:#534AB7;font-weight:600;">puntual-landing.vercel.app</a>, creá tu cuenta y arrancás la prueba gratuita al instante.',
+};
 
-CARACTERÍSTICAS:
-- Generación automática de horarios completos
-- Sin conflictos (aulas, docentes, materias)
-- Edición en tiempo real
-- Franjas horarias flexibles
-- Gestión de disponibilidades docentes
-- Exportación a PDF y Excel
-- Válido para primaria, secundaria y terciaria
+const QUICK_REPLIES = Object.keys(RESPUESTAS);
 
-PLANES:
-1. PRUEBA GRATUITA — $0 · 15 días · Sin tarjeta de crédito
-   Hasta 5 cursos y 15 docentes. Ideal para conocer la plataforma.
-2. PLAN ESTÁNDAR — USD 99/mes
-   Hasta 12 cursos, docentes ilimitados. Para instituciones medianas.
-3. PLAN COMPLETO — USD 119/mes
-   Cursos y docentes ilimitados. Para instituciones grandes.
-
-REGLAS:
-- Siempre empujá hacia la prueba gratuita como primer paso.
-- Si preguntan por precio, convertilo también a ARS aproximado (multiplicá USD por ~1400).
-- Respondé en máximo 3 oraciones. Sé concreto.
-- Si muestran interés en contratar, dales el link: https://puntual-landing.vercel.app
-- No inventes funcionalidades que no están en esta lista.`;
-
-// ⚠️ Reemplazá con tu Anthropic API key
-const API_KEY = "TU_API_KEY_AQUI";
-
-const QUICK_REPLIES = [
-  "¿Qué es Puntual?",
-  "Planes y precios",
-  "Prueba gratuita",
-  "¿Cómo empiezo?",
-];
+const RESPUESTA_GENERICA = `Esa consulta prefiero que te la responda el equipo directamente. Escribinos a <strong>${CONTACT_EMAIL}</strong> y te contestamos a la brevedad 📩`;
 
 export default function PuntualWidget() {
   const [open, setOpen] = useState(false);
@@ -48,7 +26,6 @@ export default function PuntualWidget() {
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [messages, setMessages] = useState([]);
-  const [history, setHistory] = useState([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [showBadge, setShowBadge] = useState(false);
@@ -69,10 +46,16 @@ export default function PuntualWidget() {
     setShowBadge(false);
   }
 
-  function saveLead(nombre, email) {
-    // Opción A: tu propio endpoint
-    // fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre, email }) });
-    console.log("Lead capturado:", { nombre, email, timestamp: new Date().toISOString() });
+  async function saveLead(nombre, email) {
+    try {
+      await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre, email }),
+      });
+    } catch (err) {
+      console.error("No se pudo guardar el lead del asistente:", err);
+    }
   }
 
   function startChat(skip = false) {
@@ -85,33 +68,13 @@ export default function PuntualWidget() {
     setMessages([{ role: "agent", html: greeting }]);
   }
 
-  async function askAgent(text, currentHistory) {
-    const newHistory = [...currentHistory, { role: "user", content: text }];
-    setHistory(newHistory);
+  function answer(text) {
     setTyping(true);
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 400,
-          system: SYSTEM_PROMPT,
-          messages: newHistory,
-        }),
-      });
-      const data = await res.json();
-      const reply = data.content?.[0]?.text || "Hubo un problema. ¿Podés intentar de nuevo?";
-      setHistory((h) => [...h, { role: "assistant", content: reply }]);
-      setMessages((m) => [...m, { role: "agent", html: reply }]);
-    } catch {
-      setMessages((m) => [...m, { role: "agent", html: "Ups, hubo un problema de conexión. ¿Podés intentar de nuevo?" }]);
-    }
-    setTyping(false);
+    setTimeout(() => {
+      const html = RESPUESTAS[text] || RESPUESTA_GENERICA;
+      setMessages((m) => [...m, { role: "agent", html }]);
+      setTyping(false);
+    }, 500);
   }
 
   function send(text) {
@@ -120,7 +83,7 @@ export default function PuntualWidget() {
     setInput("");
     setShowQuick(false);
     setMessages((m) => [...m, { role: "user", html: msg }]);
-    askAgent(msg, history);
+    answer(msg);
   }
 
   const s = {
