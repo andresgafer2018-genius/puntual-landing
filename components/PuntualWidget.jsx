@@ -20,6 +20,16 @@ const QUICK_REPLIES = Object.keys(RESPUESTAS);
 
 const RESPUESTA_GENERICA = `Esa consulta prefiero que te la responda el equipo directamente. Escribinos a <strong>${CONTACT_EMAIL}</strong> y te contestamos a la brevedad 📩`;
 
+const PALABRAS_DESPEDIDA = ["gracias", "chau", "chao", "adios", "hasta luego", "nos vemos"];
+
+function esDespedida(text) {
+  const t = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return PALABRAS_DESPEDIDA.some((p) => t.includes(p));
+}
+
 export default function PuntualWidget() {
   const [open, setOpen] = useState(false);
   const [leadDone, setLeadDone] = useState(false);
@@ -70,7 +80,14 @@ export default function PuntualWidget() {
   function answer(text) {
     setTyping(true);
     setTimeout(() => {
-      const html = RESPUESTAS[text] || RESPUESTA_GENERICA;
+      let html;
+      if (RESPUESTAS[text]) {
+        html = RESPUESTAS[text];
+      } else if (esDespedida(text)) {
+        html = "¡De nada! Cualquier otra consulta, acá estoy. 😊";
+      } else {
+        html = RESPUESTA_GENERICA;
+      }
       setMessages((m) => [...m, { role: "agent", html }]);
       setTyping(false);
     }, 500);
