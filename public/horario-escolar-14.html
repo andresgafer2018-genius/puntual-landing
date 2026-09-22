@@ -466,7 +466,9 @@ tr:hover td { background:rgba(79,142,247,.04); }
       <div class="nav-item" onclick="resetApp()"><span class="icon">🔄</span>Reiniciar</div>
     </div>
 
-    <div style="margin-top:auto;padding:14px 10px 6px;border-top:1px solid var(--border);text-align:center;">
+    <div class="nav-item" onclick="cerrarSesion()" style="margin-top:auto;"><span class="icon">🚪</span>Cerrar sesión</div>
+
+    <div style="padding:14px 10px 6px;border-top:1px solid var(--border);text-align:center;">
       <div style="font-size:.7em;color:var(--text3);line-height:1.7;">
         © <span id="cpYear"></span> PUNTUAL<br>
         <span style="font-style:italic;">by Prof. Andrés Fernández</span>
@@ -6879,6 +6881,16 @@ const LIMITES_TRIAL = { cursos: 5, profesores: 15 };
 const ADMIN_EMAILS = ['andresgafer2018@gmail.com']; // todo en minuscula
 
 const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Cierra la sesión de Supabase y redirige al login.
+async function cerrarSesion() {
+  try {
+    await _sb.auth.signOut();
+  } catch (e) {
+    console.error('Error al cerrar sesión:', e);
+  }
+  window.location.href = '/login';
+}
 
 // Inicializa state.user con datos del plan leídos de Supabase.
 // Si no hay sesión → redirige a /login.
