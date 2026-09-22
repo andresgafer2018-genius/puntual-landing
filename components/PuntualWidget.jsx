@@ -13,7 +13,7 @@ const RESPUESTAS = {
   "Prueba gratuita":
     "La prueba gratuita dura 15 días, no pide tarjeta de crédito, y te deja cargar hasta 5 cursos y 15 docentes para que conozcas la plataforma con tus propios datos.",
   "¿Cómo empiezo?":
-    'Es simple: entrá a <a href="https://puntual-landing.vercel.app/login" target="_blank" rel="noopener noreferrer" style="color:#534AB7;font-weight:600;">puntual-landing.vercel.app</a>, creá tu cuenta y arrancás la prueba gratuita al instante.',
+    'Es simple: entrá a <a href="https://www.puntualhorarios.com/login" target="_blank" rel="noopener noreferrer" style="color:#534AB7;font-weight:600;">puntualhorarios.com</a>, creá tu cuenta y arrancás la prueba gratuita al instante.',
 };
 
 const QUICK_REPLIES = Object.keys(RESPUESTAS);
