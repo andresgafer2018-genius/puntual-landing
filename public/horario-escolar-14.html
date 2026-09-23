@@ -5604,7 +5604,7 @@ async function _enviarFormDisponibilidadSeleccionados() {
         htmldata: htmlB64,
         htmlname: `${nombre} - Disponibilidad ${anio}.html`,
       };
-      const res = await fetch('https://puntual-landing.vercel.app/api/email/disponibilidad', {
+      const res = await fetch('/api/email/disponibilidad', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -6153,9 +6153,9 @@ function _buildProfCalendarLinks(prof) {
   const clases = state.horario.filter(h => h.profesorId === prof.id);
   if (!clases.length) return '';
 
-  // Próximo lunes como referenci
-  const jsDay = hoy.getDay(); // a para los eventos
-  const hoy = new Date(); // 0=Dom, 1=Lun, ..., 6=Sáb
+  // Próximo lunes como referencia para los eventos
+  const hoy = new Date();
+  const jsDay = hoy.getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
   const diasHastaLunes = ((1 - jsDay + 7) % 7) || 7;
   const lunesRef = new Date(hoy);
   lunesRef.setDate(hoy.getDate() + diasHastaLunes);
@@ -6383,7 +6383,7 @@ async function enviarEmailsSeleccionados() {
           + cuerpoHtmlTexto + linksHtml + '</div>';
 
 
-      const res = await fetch('https://puntual-landing.vercel.app/api/email/horario', {
+      const res = await fetch('/api/email/horario', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
