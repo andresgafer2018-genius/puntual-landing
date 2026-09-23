@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, error } = await resend.emails.send({
-      from: 'Puntual <onboarding@resend.dev>',
+      from: 'Puntual <horarios@puntualhorarios.com>',
+      replyTo: 'puntualhorarios@gmail.com',
       to: profesorEmail,
       subject: `Tu horario semanal – ${escuelaNombre}`,
       html: htmlCuerpo || `<p>Hola ${profesorNombre}, adjuntamos tu horario semanal de ${escuelaNombre}.</p>`,
