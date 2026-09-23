@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { data, error } = await resend.emails.send({
-      from: 'Puntual <onboarding@resend.dev>',
+      from: 'Puntual <horarios@puntualhorarios.com>',
+      replyTo: 'puntualhorarios@gmail.com',
       to: email,
       subject: `¡Bienvenido/a a Puntual, ${nombre}!`,
       html: `
