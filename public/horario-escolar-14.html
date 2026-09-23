@@ -6363,6 +6363,7 @@ async function enviarEmailsSeleccionados() {
     if (progressLbl) progressLbl.textContent = `Enviando ${i+1} de ${total}: ${prof.apellido}, ${prof.nombre}...`;
     if (progressBar) progressBar.style.width  = `${Math.round(i / total * 100)}%`;
 
+    try {
 // Generar el archivo ICS del profesor como base64
         const icsContent  = _buildProfIcs(prof);
         const icsBase64   = icsContent ? _icsToBase64(icsContent) : null;
@@ -6377,10 +6378,10 @@ async function enviarEmailsSeleccionados() {
           .replace(/&/g,'&amp;').replace(/</g,'&lt;')
           .replace(/>/g,'&gt;')
           .replace(/\n/g,'<br>');
-        const linksHtml  = buildCalendarLinksHtml(prof);
+        const linksHtml  = _buildCalendarLinksHtml(prof);
         const htmlbody   = '<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#222;">'
           + cuerpoHtmlTexto + linksHtml + '</div>';
-          try {
+
 
       const res = await fetch('https://puntual-landing.vercel.app/api/email/horario', {
   method: 'POST',
