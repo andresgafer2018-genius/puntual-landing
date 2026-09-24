@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
             </div>
 
             <div style="text-align: center; margin-bottom: 28px;">
-              <a href="https://puntual-landing.vercel.app/login" 
+              <a href="https://puntualhorarios.com/login" 
                  style="display: inline-block; background: #4f8ef7; color: #fff; text-decoration: none; 
                         padding: 14px 32px; border-radius: 10px; font-size: 15px; font-weight: 700;">
                 Ir a la app →
