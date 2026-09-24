@@ -4994,16 +4994,82 @@ function updateBadges() {
   document.getElementById('sbCurBadge').textContent = state.cursos.length;
 }
 
-// ── Auto-save ────────────────────────────────────────────────────────────────
+// ── Guardado: nube (Supabase, tabla datos_usuario) + copia local por usuario ──
+// Cada usuario tiene su propia copia local ('eduscheduler:<id>') y su fila en la
+// nube. Los datos del usuario/plan (state.user) NUNCA se guardan: se leen siempre
+// de Supabase en initPlan().
+const _LS_VIEJA = 'eduscheduler'; // clave compartida anterior al 24/9/2026 (solo para migrar)
 let _autoSaveTimer = null;
+let _nubeTimer = null;
+let _nubeLista = false;          // true solo si los datos de la nube se cargaron bien
+let _ultimaFirmaNube = null;     // último contenido subido (para no subir si no cambió)
+let _cadenaNube = Promise.resolve(true);
+
+function _lsKey() {
+  return (state.user && state.user.id) ? 'eduscheduler:' + state.user.id : null;
+}
+
+// Copia del estado sin los datos del usuario/plan
+function _estadoParaGuardar() {
+  const { user, ...resto } = state;
+  return resto;
+}
+
+// Limpia datos que vienen de afuera (nube, local o archivo importado)
+function _limpiarDatosCargados(d) {
+  if (!d || typeof d !== 'object') return {};
+  const c = { ...d };
+  delete c.user;
+  delete c._guardadoEn;
+  return c;
+}
+
+function _guardarLocalAhora() {
+  const k = _lsKey();
+  if (!k) return false;
+  try {
+    const d = { ..._estadoParaGuardar(), _guardadoEn: Date.now() };
+    localStorage.setItem(k, JSON.stringify(d));
+    return true;
+  } catch(e) {
+    return false;
+  }
+}
+
+async function _subirANube() {
+  const uid = state.user && state.user.id;
+  if (!uid || !_nubeLista) return false;
+  const base = _estadoParaGuardar();
+  const firma = JSON.stringify(base);
+  if (firma === _ultimaFirmaNube) return true; // nada nuevo para subir
+  try {
+    const { error } = await _sb.from('datos_usuario').upsert({
+      owner_id: uid,
+      datos: { ...base, _guardadoEn: Date.now() },
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    _ultimaFirmaNube = firma;
+    return true;
+  } catch(e) {
+    console.error('No se pudo guardar en la nube:', e);
+    return false;
+  }
+}
+
+// Encadena las subidas para que nunca se pisen entre sí
+function _guardarNubeAhora() {
+  _cadenaNube = _cadenaNube.then(_subirANube, _subirANube);
+  return _cadenaNube;
+}
 
 function _commitSave() {
-  try {
-    localStorage.setItem('eduscheduler', JSON.stringify(state));
-    _saveIndicator('ok');
-  } catch(e) {
-    _saveIndicator('err');
-  }
+  if (!_guardarLocalAhora()) { _saveIndicator('err'); return; }
+  clearTimeout(_nubeTimer);
+  _nubeTimer = setTimeout(async () => {
+    const ok = await _guardarNubeAhora();
+    _saveIndicator(ok ? 'ok' : 'offline');
+  }, 1200);
 }
 
 function saveLocal() {
@@ -5033,6 +5099,10 @@ function _saveIndicator(status) {
     el.style.background = '#DCFCE7'; el.style.color = '#166534';
     el.textContent = '✅ Guardado';
     _saveIndicator._t = setTimeout(() => { el.style.display = 'none'; }, 2000);
+  } else if (status === 'offline') {
+    el.style.background = '#FEF3C7'; el.style.color = '#92400E';
+    el.textContent = '☁️ Sin conexión con la nube: guardado solo en este equipo';
+    _saveIndicator._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
   } else {
     el.style.background = '#FEE2E2'; el.style.color = '#991B1B';
     el.textContent = '⚠️ No se pudo guardar';
@@ -5040,13 +5110,84 @@ function _saveIndicator(status) {
   }
 }
 
-function loadLocal() {
+// Carga los datos del usuario: compara la copia de la nube con la local y usa la
+// más reciente. Devuelve false si no se puede mostrar la app (ya avisó al usuario).
+async function cargarDatos() {
+  const uid = state.user && state.user.id;
+  const k = _lsKey();
+  let local = null, nube = null, errorNube = null, migrado = false;
+
+  try { const t = k && localStorage.getItem(k); if (t) local = JSON.parse(t); } catch(e) {}
+
+  // Migración única desde la clave compartida anterior: solo si esos datos
+  // pertenecen a este usuario (o, si no tienen dueño registrado, al administrador)
+  if (!local) {
+    try {
+      const t = localStorage.getItem(_LS_VIEJA);
+      if (t) {
+        const v = JSON.parse(t);
+        const dueno = v && v.user && v.user.id;
+        if (dueno === uid || (!dueno && state.user.esAdmin)) {
+          local = v;
+          local._guardadoEn = local._guardadoEn || 1;
+          migrado = true;
+        }
+      }
+    } catch(e) {}
+  }
+
   try {
-    const d = localStorage.getItem('eduscheduler');
-    if (d) { const p=JSON.parse(d); Object.assign(state, p); }
-  } catch(e){}
-  // Ensure config exists
+    const { data, error } = await _sb
+      .from('datos_usuario')
+      .select('datos')
+      .eq('owner_id', uid)
+      .maybeSingle();
+    if (error) throw error;
+    nube = data ? data.datos : null;
+  } catch(e) {
+    errorNube = e;
+    console.error('No se pudieron leer los datos de la nube:', e);
+  }
+
+  if (errorNube && !local) {
+    _mostrarErrorCarga();
+    return false;
+  }
+
+  const tLocal = (local && local._guardadoEn) || 0;
+  const tNube  = (nube && nube._guardadoEn) || 0;
+  let origen = null;
+  if (nube && (!local || tNube >= tLocal)) origen = 'nube';
+  else if (local) origen = 'local';
+
+  if (origen) Object.assign(state, _limpiarDatosCargados(origen === 'nube' ? nube : local));
   if (!state.config) state.config = { nombreEscuela:'', modalidad:'simple_manana', durModulo:40, diasActivos:[0,1,2,3,4], franjas:null };
+
+  if (!errorNube) {
+    _nubeLista = true;
+    if (origen === 'nube') _ultimaFirmaNube = JSON.stringify(_estadoParaGuardar());
+  }
+
+  if (origen) _guardarLocalAhora();
+  if (migrado && _lsKey() && localStorage.getItem(_lsKey())) {
+    try { localStorage.removeItem(_LS_VIEJA); } catch(e) {}
+  }
+  if (origen === 'local' && _nubeLista) _guardarNubeAhora(); // la local era más nueva → subirla
+  if (errorNube) _saveIndicator('offline');
+  return true;
+}
+
+function _mostrarErrorCarga() {
+  const d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(10,14,26,.92);' +
+    'display:flex;align-items:center;justify-content:center;font-family:DM Sans,sans-serif;';
+  d.innerHTML = '<div style="background:#fff;color:#111;max-width:420px;padding:28px;border-radius:12px;text-align:center;">' +
+    '<div style="font-size:32px;margin-bottom:8px;">☁️</div>' +
+    '<h3 style="margin:0 0 10px;">No pudimos cargar tus datos</h3>' +
+    '<p style="margin:0 0 18px;color:#555;font-size:14px;">Revisá tu conexión a internet y volvé a intentar. Tus datos están a salvo.</p>' +
+    '<button onclick="location.reload()" style="background:#3B82F6;color:#fff;border:0;padding:10px 22px;border-radius:8px;font-size:14px;cursor:pointer;">Reintentar</button>' +
+    '</div>';
+  document.body.appendChild(d);
 }
 
 function imprimirHorario() {
@@ -6572,7 +6713,7 @@ function eliminarHorarioHistorial(id) {
 }
 
 function exportarJSON() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify(_estadoParaGuardar(), null, 2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='horario-escolar.json'; a.click();
 }
@@ -6619,7 +6760,7 @@ function handleImport(e) {
   const f = e.target.files[0]; if (!f) return;
   const r = new FileReader(); r.onload = ev => {
     try {
-      const d = JSON.parse(ev.target.result);
+      const d = _limpiarDatosCargados(JSON.parse(ev.target.result));
       Object.assign(state, d); saveLocal(); renderDashboard(); updateBadges(); alert('✅ Datos importados correctamente.');
     } catch(err) { alert('❌ Error al importar: archivo inválido.'); }
   }; r.readAsText(f);
@@ -6686,8 +6827,10 @@ function importarDisponibilidadHTMLs(input) {
 
 function resetApp() {
   if (!confirm('¿Reiniciar toda la aplicación? Se perderán todos los datos.')) return;
+  const _user = state.user; // los datos del plan no se reinician
   state = { profesores:[], materias:[], cursos:[], horario:[], _ultimosPendientes:[], _forzados:[], _mejorSolucion:null, _historialHorarios:[], editingProf:null, editingMat:null, editingCur:null, selectedCurso:null,
     config:{ nombreEscuela:'', modalidad:'simple_manana', durModulo:40, diasActivos:[0,1,2,3,4], franjas:null } };
+  state.user = _user;
   saveLocal(); renderDashboard(); updateBadges();
 }
 
@@ -6885,6 +7028,20 @@ const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // Cierra la sesión de Supabase y redirige al login.
 async function cerrarSesion() {
+  clearTimeout(_autoSaveTimer);
+  clearTimeout(_nubeTimer);
+  if (state.user && state.user.id) {
+    _guardarLocalAhora();
+    const subido = await _guardarNubeAhora();
+    if (subido) {
+      // Ya está en la nube: se borra la copia de este equipo (por si es compartido)
+      try { localStorage.removeItem(_lsKey()); } catch(e) {}
+    } else if (!confirm('⚠️ No se pudieron subir tus últimos cambios a la nube (¿sin conexión?).\n' +
+                        'Quedan guardados en este equipo y se subirán la próxima vez que entres desde acá.\n\n' +
+                        '¿Cerrar sesión igual?')) {
+      return;
+    }
+  }
   try {
     await _sb.auth.signOut();
   } catch (e) {
@@ -7034,7 +7191,8 @@ function checkLimitePlan(tipo) {
 (async () => {
   const ok = await initPlan();
   if (!ok) return; // sin sesión o plan vencido: ya se redirigió
-  loadLocal();
+  const cargado = await cargarDatos();
+  if (!cargado) return; // no se pudo cargar: ya se avisó al usuario
   renderDashboard();
   updateBadges();
 })();
@@ -7042,12 +7200,12 @@ function checkLimitePlan(tipo) {
 // Guardar síncronamente antes de cerrar/recargar la pestaña
 window.addEventListener('beforeunload', () => {
   clearTimeout(_autoSaveTimer);
-  try { localStorage.setItem('eduscheduler', JSON.stringify(state)); } catch(e) {}
+  _guardarLocalAhora(); // si quedó algo sin subir, se sube al volver a entrar
 });
 
 // Red de seguridad: guardar cada 30 segundos aunque no haya interacción
 setInterval(() => {
-  try { localStorage.setItem('eduscheduler', JSON.stringify(state)); } catch(e) {}
+  if (_guardarLocalAhora()) _guardarNubeAhora(); // solo sube si hubo cambios
 }, 30000);
 
 // Logo sidebar + favicon: reutilizan el base64 ya embebido en el header
