@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     console.log(`Tipo cambio oficial: $${tipoCambio} | ${plan.title}: USD ${plan.usd} = ARS ${precioARS}`);
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://puntual-landing.vercel.app";
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://puntualhorarios.com";
 
     const body = {
       items: [{
