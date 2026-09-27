@@ -3905,6 +3905,35 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
   const profHsMap  = new Map();   // profId           → horas asignadas (maxHs check)
   const taskByKey  = new Map();   // "cursoId_matId"  → objeto tarea original
 
+  // ── Índice liviano propio de esta fase (O(1)) ────────────────────────────
+  // Igual que en FASE 7 (_minConflictsHillClimbing), esta fase mueve dia/modulo
+  // in-place, así que usa su propio índice en vez del general (_crearIndice).
+  // A diferencia de FASE 7, acá NUNCA se crean choques (todo move verifica
+  // antes), por eso alcanza con mapas de valor único:
+  //   slotProf  "profId|d|m"  → entrada
+  //   slotCurso "cursoId|d|m" → entrada
+  //   posDe     entrada       → posición en `horario` (para quitar en O(1))
+  const profMap   = new Map(state.profesores.map(p => [p.id, p]));
+  const cursoMap  = new Map(state.cursos.map(c => [c.id, c]));
+  const keyPDM = (profId, d, m)  => `${profId}|${d}|${m}`;
+  const keyCDM = (cursoId, d, m) => `${cursoId}|${d}|${m}`;
+  const slotProf  = new Map();
+  const slotCurso = new Map();
+  const posDe     = new Map();
+  function _slotsPoner(h) {
+    slotProf.set(keyPDM(h.profesorId, h.dia, h.modulo), h);
+    slotCurso.set(keyCDM(h.cursoId, h.dia, h.modulo), h);
+  }
+  function _slotsSacar(h) {
+    slotProf.delete(keyPDM(h.profesorId, h.dia, h.modulo));
+    slotCurso.delete(keyCDM(h.cursoId, h.dia, h.modulo));
+  }
+  function _reconstruirSlots() {
+    slotProf.clear(); slotCurso.clear(); posDe.clear();
+    horario.forEach((h, i) => { _slotsPoner(h); posDe.set(h, i); });
+  }
+  _reconstruirSlots();
+
   todasLasTareas.forEach(t => {
     const mat    = state.materias.find(m => m.id === t.matId);
     const hsOrig = (t.curso.horasPorMateria || {})[t.matId] || mat?.horas || 4;
@@ -3929,13 +3958,21 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
   let mejorCosto   = costo;
 
   // ── Helpers de modificación incremental ──────────────────────────────────
+  // Registro de deshacer: mientras hay un snapshot abierto, addEntry/removeAt
+  // anotan lo que hicieron y restore() lo revierte en orden inverso. Así el
+  // rollback cuesta O(cambios) en vez de copiar y reindexar todo el horario.
+  let registro = null;
+
   function addEntry(h) {
+    posDe.set(h, horario.length);
     horario.push(h);
+    _slotsPoner(h);
     const k    = `${h.cursoId}_${h.materiaId}`;
     const prev = placedMap.get(k) || 0;
     placedMap.set(k, prev + 1);
     profHsMap.set(h.profesorId, (profHsMap.get(h.profesorId) || 0) + 1);
     if (prev < (neededMap.get(k) || 0)) costo--;
+    if (registro) registro.push({ tipo: 'add', h });
   }
 
   function removeAt(idx) {
@@ -3945,50 +3982,93 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
     placedMap.set(k, prev - 1);
     profHsMap.set(h.profesorId, (profHsMap.get(h.profesorId) || 1) - 1);
     if (prev <= (neededMap.get(k) || 0)) costo++;
+    _slotsSacar(h);
+    posDe.delete(h);
     // Swap-con-último para O(1)
-    horario[idx] = horario[horario.length - 1];
+    const ultimo = horario[horario.length - 1];
+    horario[idx] = ultimo;
     horario.pop();
+    if (ultimo !== h) posDe.set(ultimo, idx);
+    if (registro) registro.push({ tipo: 'rem', h, idx, ultimo });
     return h;
   }
 
-  // Snapshot liviano para rollback
-  function snap() {
-    return {
-      h:  horario.map(x => ({ ...x })),
-      c:  costo,
-      pm: new Map(placedMap),
-      ph: new Map(profHsMap)
-    };
-  }
-  function restore(s) {
-    horario.length = 0;
-    s.h.forEach(x => horario.push(x));
-    costo = s.c;
-    placedMap.clear(); s.pm.forEach((v, k) => placedMap.set(k, v));
-    profHsMap.clear(); s.ph.forEach((v, k) => profHsMap.set(k, v));
+  // Mueve una entrada a (d, m) manteniendo el índice sincronizado
+  function moverEntrada(h, d, m) {
+    _slotsSacar(h);
+    h.dia = d; h.modulo = m;
+    _slotsPoner(h);
   }
 
-  // Lista de tareas con horas sin colocar (O(tareas))
+  // Snapshot liviano para rollback: abre el registro de deshacer
+  function snap() {
+    registro = [];
+    return { c: costo, reg: registro };
+  }
+  // Acepta el move: cierra el registro sin deshacer nada
+  function commit() { registro = null; }
+  function restore(s) {
+    const reg = s.reg;
+    registro = null;
+    for (let i = reg.length - 1; i >= 0; i--) {
+      const op = reg[i];
+      const h  = op.h;
+      const k  = `${h.cursoId}_${h.materiaId}`;
+      if (op.tipo === 'add') {
+        // Al deshacer en orden inverso, la entrada agregada está al final
+        horario.pop();
+        posDe.delete(h);
+        _slotsSacar(h);
+        placedMap.set(k, (placedMap.get(k) || 0) - 1);
+        profHsMap.set(h.profesorId, (profHsMap.get(h.profesorId) || 0) - 1);
+      } else {
+        // Volver a poner `h` en su posición y el que la había reemplazado al final
+        if (op.ultimo !== h) {
+          horario.push(op.ultimo);
+          posDe.set(op.ultimo, horario.length - 1);
+          horario[op.idx] = h;
+        } else {
+          horario.push(h);
+        }
+        posDe.set(h, op.idx);
+        _slotsPoner(h);
+        placedMap.set(k, (placedMap.get(k) || 0) + 1);
+        profHsMap.set(h.profesorId, (profHsMap.get(h.profesorId) || 0) + 1);
+      }
+    }
+    costo = s.c;
+  }
+
+  // Lista de tareas con horas sin colocar (O(tareas), sin copiar objetos).
+  // Mismo orden que neededMap. Devuelve las tareas originales: el SA solo lee
+  // curso, matId, prof y profCandidatos (nunca hsReq), así que no hace falta
+  // armar un objeto nuevo por tarea en cada iteración.
+  const tareasArr = [];
+  neededMap.forEach((needed, k) => tareasArr.push({ k, needed, t: taskByKey.get(k) }));
   function getPend() {
     const out = [];
-    neededMap.forEach((needed, k) => {
-      const falta = needed - (placedMap.get(k) || 0);
-      if (falta > 0) {
-        const t = taskByKey.get(k);
-        if (t) out.push({ ...t, hsReq: falta });
-      }
-    });
+    for (let i = 0; i < tareasArr.length; i++) {
+      const e = tareasArr[i];
+      if (e.t && e.needed - (placedMap.get(e.k) || 0) > 0) out.push(e.t);
+    }
     return out;
   }
 
-  // Validadores inline
-  const profOcupadoEn = (pId, d, m) =>
-    horario.some(h => h.profesorId === pId && h.dia === d && h.modulo === m);
-  const cursoOcupadoEn = (cId, d, m) =>
-    horario.some(h => h.cursoId === cId && h.dia === d && h.modulo === m);
+  // Validadores inline — O(1) vía índice
+  const profOcupadoEn  = (pId, d, m) => slotProf.has(keyPDM(pId, d, m));
+  const cursoOcupadoEn = (cId, d, m) => slotCurso.has(keyCDM(cId, d, m));
   const profTieneDisp = (prof, d, m) => {
     const av = prof.disponibilidad || defaultAvail();
     return !!(av[m]?.[d]);
+  };
+  // ¿Hay otra entrada (≠ excluida) del curso / prof en (d, m)?
+  const cursoOcupadoPorOtra = (cId, d, m, excl) => {
+    const e = slotCurso.get(keyCDM(cId, d, m));
+    return !!e && e !== excl;
+  };
+  const profOcupadoPorOtra = (pId, d, m, excl) => {
+    const e = slotProf.get(keyPDM(pId, d, m));
+    return !!e && e !== excl;
   };
 
   // ── Bucle SA ──────────────────────────────────────────────────────────────
@@ -4019,11 +4099,12 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
         if (costo < mejorCosto) { mejorCosto = costo; mejorHorario = horario.map(h => ({ ...h })); }
       } else {
         // El prof está ocupado → intentar desplazar el bloqueante
-        const bloqIdx = horario.findIndex(h => h.profesorId === prof.id && h.dia === d && h.modulo === m);
-        if (bloqIdx === -1) continue;
+        const bloqEnt = slotProf.get(keyPDM(prof.id, d, m));
+        const bloqIdx = bloqEnt ? posDe.get(bloqEnt) : undefined;
+        if (bloqIdx === undefined) continue;
         const bloq  = horario[bloqIdx];
-        const profB = state.profesores.find(p => p.id === bloq.profesorId);
-        const crsB  = state.cursos.find(c => c.id === bloq.cursoId);
+        const profB = profMap.get(bloq.profesorId);
+        const crsB  = cursoMap.get(bloq.cursoId);
         if (!profB || !crsB) continue;
 
         const s = snap();
@@ -4046,6 +4127,7 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
         // Δ = costo actual − costo antes del snap
         const delta = costo - s.c;
         if (delta <= 0 || Math.random() < Math.exp(-delta / T)) {
+          commit();
           if (costo < mejorCosto) { mejorCosto = costo; mejorHorario = horario.map(h => ({ ...h })); }
         } else {
           restore(s);
@@ -4059,16 +4141,16 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
       if (!horario.length) continue;
       const idx  = Math.floor(Math.random() * horario.length);
       const h    = horario[idx];
-      const prof = state.profesores.find(p => p.id === h.profesorId);
+      const prof = profMap.get(h.profesorId);
       if (!prof) continue;
       const dN = Math.floor(Math.random() * DIAS.length);
       const mN = Math.floor(Math.random() * MODULOS.length);
       if (dN === h.dia && mN === h.modulo) continue;
       if (!profTieneDisp(prof, dN, mN)) continue;
-      if (horario.some((x, i) => i !== idx && x.cursoId    === h.cursoId    && x.dia === dN && x.modulo === mN)) continue;
-      if (horario.some((x, i) => i !== idx && x.profesorId === h.profesorId && x.dia === dN && x.modulo === mN)) continue;
+      if (cursoOcupadoPorOtra(h.cursoId,    dN, mN, h)) continue;
+      if (profOcupadoPorOtra(h.profesorId,  dN, mN, h)) continue;
       // Neutral → aceptar siempre (reconfiguración exploratoria)
-      h.dia = dN; h.modulo = mN;
+      moverEntrada(h, dN, mN);
 
     // ────────────────────────────────────────────────────────────────────────
     // MOVE C (15 %): intercambio de slots entre dos clases (Δ = 0)
@@ -4080,17 +4162,21 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
       if (i2 >= i1) i2++;
       const h1 = horario[i1], h2 = horario[i2];
       if (h1.profesorId === h2.profesorId) continue;
-      const p1 = state.profesores.find(p => p.id === h1.profesorId);
-      const p2 = state.profesores.find(p => p.id === h2.profesorId);
+      const p1 = profMap.get(h1.profesorId);
+      const p2 = profMap.get(h2.profesorId);
       if (!p1 || !p2) continue;
       if (!profTieneDisp(p1, h2.dia, h2.modulo) || !profTieneDisp(p2, h1.dia, h1.modulo)) continue;
-      if (horario.some((x,i)=>i!==i1&&x.cursoId   ===h1.cursoId   &&x.dia===h2.dia&&x.modulo===h2.modulo)) continue;
-      if (horario.some((x,i)=>i!==i2&&x.cursoId   ===h2.cursoId   &&x.dia===h1.dia&&x.modulo===h1.modulo)) continue;
-      if (horario.some((x,i)=>i!==i1&&x.profesorId===h1.profesorId&&x.dia===h2.dia&&x.modulo===h2.modulo)) continue;
-      if (horario.some((x,i)=>i!==i2&&x.profesorId===h2.profesorId&&x.dia===h1.dia&&x.modulo===h1.modulo)) continue;
+      if (cursoOcupadoPorOtra(h1.cursoId,    h2.dia, h2.modulo, h1)) continue;
+      if (cursoOcupadoPorOtra(h2.cursoId,    h1.dia, h1.modulo, h2)) continue;
+      if (profOcupadoPorOtra(h1.profesorId,  h2.dia, h2.modulo, h1)) continue;
+      if (profOcupadoPorOtra(h2.profesorId,  h1.dia, h1.modulo, h2)) continue;
       const dT=h1.dia, mT=h1.modulo;
+      // Sacar ambas antes de poner ninguna: si son del mismo curso, sus
+      // claves se cruzan y poner una antes de sacar la otra la pisaría.
+      _slotsSacar(h1); _slotsSacar(h2);
       h1.dia=h2.dia; h1.modulo=h2.modulo;
       h2.dia=dT;     h2.modulo=mT;
+      _slotsPoner(h1); _slotsPoner(h2);
 
     // ────────────────────────────────────────────────────────────────────────
     // MOVE D (10 %): quitar una clase (Δ = +1) → SA puro para abrir huecos
@@ -4098,14 +4184,14 @@ function _recocidoSimulado(horarioInicial, todasLasTareas, MODULOS, DIAS, deadli
     // ────────────────────────────────────────────────────────────────────────
     } else {
       if (!horario.length || mejorCosto === 0) continue;
-      const pend = getPend();
-      if (!pend.length) continue; // solo si hay algo que ganar
+      if (costo <= 0) continue; // solo si hay algo que ganar (costo > 0 ⇔ hay pendientes)
       const idx = Math.floor(Math.random() * horario.length);
       const s   = snap();
       removeAt(idx); // costo + 1 (si era necesaria)
       const delta = costo - s.c;
       if (delta <= 0 || Math.random() < Math.exp(-delta / T)) {
         // Aceptar: slot liberado; futuros moves A pueden aprovecharlo
+        commit();
       } else {
         restore(s);
       }
