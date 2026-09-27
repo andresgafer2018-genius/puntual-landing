@@ -6847,9 +6847,32 @@ function handleImport(e) {
   const r = new FileReader(); r.onload = ev => {
     try {
       const d = _limpiarDatosCargados(JSON.parse(ev.target.result));
+      // Límites del plan: controlar cómo quedaría todo DESPUÉS de importar
+      // (la importación puede ser parcial y reemplazar solo una lista).
+      const excedido = _importExcedeLimites(d);
+      if (excedido) { alert(excedido); return; }
       Object.assign(state, d); saveLocal(); renderDashboard(); updateBadges(); alert('✅ Datos importados correctamente.');
     } catch(err) { alert('❌ Error al importar: archivo inválido.'); }
+    finally { e.target.value = ''; } // permite volver a elegir el mismo archivo
   }; r.readAsText(f);
+}
+
+// Devuelve el mensaje de aviso si importar `d` dejaría la cuenta por encima
+// de los límites del plan de prueba, o null si se puede importar.
+// Mismas excepciones que checkLimitePlan: admin y plan pago no tienen límite.
+function _importExcedeLimites(d) {
+  const u = state.user;
+  if (!u) return null;
+  if (u.esAdmin || u.plan === 'admin' || u.plan === 'paid') return null;
+  const nCursos = Array.isArray(d.cursos)     ? d.cursos.length     : state.cursos.length;
+  const nProfes = Array.isArray(d.profesores) ? d.profesores.length : state.profesores.length;
+  const exc = [];
+  if (nCursos > LIMITES_TRIAL.cursos)     exc.push(`• ${nCursos} cursos (máximo ${LIMITES_TRIAL.cursos})`);
+  if (nProfes > LIMITES_TRIAL.profesores) exc.push(`• ${nProfes} profesores (máximo ${LIMITES_TRIAL.profesores})`);
+  if (!exc.length) return null;
+  return `⚠️ No se importó el archivo: supera los límites del plan de prueba.\n\n` +
+         exc.join('\n') +
+         `\n\nPara cargar todo, pasate al plan pago desde /planes.`;
 }
 
 function importarDisponibilidadHTMLs(input) {
