@@ -2,57 +2,51 @@ name: Puntual Outreach Diario
 
 on:
   schedule:
-    # Corre todos los días a las 9:00 AM Argentina (UTC-3 = 12:00 UTC)
-    - cron: "0 12 * * 1-5"  # Lunes a viernes
-  workflow_dispatch:  # También permite correrlo manualmente desde GitHub
+    # Lunes a viernes, 9:00 AM Argentina (12:00 UTC).
+    # GitHub puede demorar los workflows programados un par de horas.
+    - cron: "0 12 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      email_prueba:
+        description: "Modo prueba: genera UN mail y lo manda a esta dirección (no a la escuela). Dejar vacío para envío real."
+        required: false
+        default: ""
+      cantidad:
+        description: "Envío real: cantidad de mails (vacío = usar la variable MAX_EMAILS_POR_DIA)"
+        required: false
+        default: ""
+
+# Evita que dos corridas se pisen
+concurrency:
+  group: outreach
+  cancel-in-progress: false
 
 jobs:
   outreach:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: 22
 
       - name: Instalar dependencias
-        run: |
-          cd outreach
-          npm install
+        working-directory: outreach
+        run: npm install --no-audit --no-fund
 
-      - name: Buscar emails nuevos
+      - name: Enviar emails
+        working-directory: outreach
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: |
-          cd outreach
-          node outreach.js buscar
-
-      - name: Enviar emails personalizados
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-        run: |
-          cd outreach
-          node outreach.js enviar
-
-      - name: Guardar base de datos actualizada
-        uses: actions/upload-artifact@v4
-        with:
-          name: colegios-db
-          path: outreach/colegios.json
-          retention-days: 30
-
-      - name: Commit estado actualizado
-        run: |
-          git config --global user.name "Puntual Bot"
-          git config --global user.email "bot@puntual.app"
-          git add outreach/colegios.json
-          git diff --staged --quiet || git commit -m "chore: actualizar estado outreach $(date +'%Y-%m-%d')"
-          git push
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MAX_EMAILS_POR_DIA: ${{ vars.MAX_EMAILS_POR_DIA }}
+          EMAIL_PRUEBA: ${{ inputs.email_prueba }}
+          CANTIDAD: ${{ inputs.cantidad }}
+        run: node outreach.js
