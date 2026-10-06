@@ -193,7 +193,7 @@ export default function PuntualLanding() {
         transition: "all .3s", padding: "0 24px", height: 68,
         display: "flex", alignItems: "center", gap: 16,
       }}>
-        <img src="logopuntual.png" alt="Puntual" style={{ height: 44, width: "auto", display: "block", flexShrink: 0 }} />
+        <img src="/logopuntual.png" alt="Puntual" style={{ height: 44, width: "auto", display: "block", flexShrink: 0 }} />
 
         <div style={{ display: "flex", gap: 28, marginLeft: 32, flex: 1 }} className="desktop-nav">
           {NAV_LINKS.map((l) => (
