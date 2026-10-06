@@ -237,7 +237,7 @@ export default function PuntualLanding() {
           <div>
             <div className="badge" style={{ marginBottom: 28 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ff7a8", display: "inline-block" }} />
-              Ya usado en +80 escuelas de Argentina
+              Hecho en Argentina para escuelas secundarias
             </div>
             <h1 style={{ fontFamily: "'DM Serif Display', serif", fontSize: "clamp(38px, 5.5vw, 68px)", lineHeight: 1.06, marginBottom: 24, letterSpacing: "-1px" }}>
               El horario escolar<br />
