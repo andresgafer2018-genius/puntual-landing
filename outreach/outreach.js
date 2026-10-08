@@ -2,14 +2,15 @@
  * PUNTUAL — Outreach automático a escuelas secundarias
  *
  * Lee las escuelas pendientes de la tabla `escuelas_outreach` (Supabase),
- * arma el mail (plantilla fija con el nombre de cada escuela) y lo envía por Gmail.
- * Corre en GitHub Actions (.github/workflows/outreach.yml).
+ * arma el mail eligiendo al azar una de 4 versiones de texto y lo envía por Gmail.
+ * Corre en GitHub Actions (.github/workflows/outreach.yml), 5 veces por día hábil,
+ * mandando 1 mail por corrida.
  *
  * Variables de entorno (GitHub Secrets / Variables):
  *   GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY  (secrets)
- *   MAX_EMAILS_POR_DIA  (variable, por defecto 10)
- *   EMAIL_PRUEBA  (opcional) → modo prueba: 1 mail a esta dirección, no toca la base
- *   CANTIDAD      (opcional) → pisa MAX_EMAILS_POR_DIA en una corrida manual
+ *   MAX_EMAILS_POR_DIA  (variable) → tope diario total, por defecto 5
+ *   EMAIL_PRUEBA  (opcional) → modo prueba: manda las 4 versiones a esta dirección, no toca la base
+ *   CANTIDAD      (opcional) → corrida manual: cuántos mails mandar ahora (saltea los controles de horario)
  */
 
 const { createClient } = require("@supabase/supabase-js");
@@ -18,8 +19,9 @@ const nodemailer = require("nodemailer");
 // ─── CONFIGURACIÓN ───────────────────────────────────────────────────────────
 
 const TABLA = "escuelas_outreach";
-const LIMITE_MAXIMO = 100; // tope de seguridad por corrida
-const ESPERA_MIN_MS = 2 * 60 * 1000; // entre mails: 2 a 4 minutos al azar
+const LIMITE_MAXIMO = 20; // tope de seguridad por corrida manual
+const SEPARACION_MINIMA_MIN = 90; // no mandar si el último mail salió hace menos de esto
+const ESPERA_MIN_MS = 2 * 60 * 1000; // en corridas manuales de varios mails: 2 a 4 min entre mails
 const ESPERA_MAX_MS = 4 * 60 * 1000;
 
 const requeridas = ["GMAIL_USER", "GMAIL_APP_PASSWORD", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"];
@@ -32,10 +34,11 @@ if (faltantes.length) {
 
 const EMAIL_PRUEBA = (process.env.EMAIL_PRUEBA || "").trim();
 const MODO_PRUEBA = EMAIL_PRUEBA !== "";
-const cantidadPedida = parseInt(process.env.CANTIDAD || process.env.MAX_EMAILS_POR_DIA || "10", 10);
-const CANTIDAD = MODO_PRUEBA
-  ? 1
-  : Math.min(Number.isFinite(cantidadPedida) && cantidadPedida > 0 ? cantidadPedida : 10, LIMITE_MAXIMO);
+const cantidadManual = parseInt(process.env.CANTIDAD || "", 10);
+const ES_MANUAL = Number.isFinite(cantidadManual) && cantidadManual > 0;
+const CANTIDAD = ES_MANUAL ? Math.min(cantidadManual, LIMITE_MAXIMO) : 1;
+const topeDiario = parseInt(process.env.MAX_EMAILS_POR_DIA || "5", 10);
+const MAX_POR_DIA = Number.isFinite(topeDiario) && topeDiario > 0 ? topeDiario : 5;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
   auth: { persistSession: false },
@@ -53,7 +56,7 @@ const azar = (min, max) => Math.floor(min + Math.random() * (max - min));
 
 // ─── NOMBRE DE LA ESCUELA ────────────────────────────────────────────────────
 
-const ABREVIATURAS = { "inst.": "Instituto", "esc.": "Escuela", "col.": "Colegio" };
+const ABREVIATURAS = { "inst.": "Instituto", "esc.": "Escuela", "col.": "Colegio", "coleg.": "Colegio" };
 const MINUSCULAS = ["de", "del", "la", "las", "los", "el", "y", "e", "en", "a"];
 
 // "INSTITUTO INDUSTRIAL LUIS A.HUERGO" → "Instituto Industrial Luis A.Huergo"
@@ -85,13 +88,16 @@ function conArticulo(nombre) {
   return `de ${nombre}`;
 }
 
-// ─── TEXTO DEL MAIL (plantilla fija) ─────────────────────────────────────────
+// ─── TEXTOS DEL MAIL (4 versiones, se elige una al azar) ─────────────────────
 
-const ASUNTO = "Una forma más simple de organizar el horario escolar";
+const PIE_BAJA = `—
+Si no querés recibir más correos de Puntual, respondé este mensaje con la palabra BAJA.`;
 
-function armarMail(escuela) {
-  const saludo = `Hola, equipo ${conArticulo(capitalizar(escuela.nombre))}:`;
-  const cuerpo = `${saludo}
+const VERSIONES = [
+  // Versión 1 — original de Andy
+  (equipo) => ({
+    asunto: "Una forma más simple de organizar el horario escolar",
+    cuerpo: `Hola, equipo ${equipo}:
 
 Te escribo porque desarrollé Puntual, una herramienta que arma automáticamente el horario semanal de una escuela a partir de las materias, los profesores y sus disponibilidades — evitando los cruces de horarios que suelen aparecer al hacerlo a mano.
 
@@ -107,9 +113,113 @@ Saludos,
 Andy
 Puntual — puntualhorarios@gmail.com
 
-—
-Si no querés recibir más correos de Puntual, respondé este mensaje con la palabra BAJA.`;
-  return { asunto: ASUNTO, cuerpo };
+${PIE_BAJA}`,
+  }),
+
+  // Versión 2 — más corta y directa
+  (equipo) => ({
+    asunto: "Horarios escolares sin cruces, armados en minutos",
+    cuerpo: `Estimado equipo ${equipo}:
+
+Me llamo Andy y desarrollé Puntual, una herramienta pensada para escuelas secundarias que arma el horario semanal de forma automática, sin superposiciones entre profesores.
+
+Cada docente completa un formulario con su disponibilidad y lo envía por mail; del lado de la escuela, esos datos se incorporan al sistema automáticamente, sin cargar nada a mano. Y cuando el horario está listo, cada profesor lo recibe actualizado con un clic.
+
+Se puede probar gratis, sin compromiso, cargando los datos de la escuela. En la página hay un video corto que muestra cómo funciona: www.puntualhorarios.com
+
+Si les interesa, con gusto respondo cualquier duda.
+
+Saludos,
+Andy — Puntual
+
+${PIE_BAJA}`,
+  }),
+
+  // Versión 3 — empieza por el problema
+  (equipo) => ({
+    asunto: "¿Cuánto tiempo les lleva armar el horario cada año?",
+    cuerpo: `Hola, equipo ${equipo}:
+
+Armar el horario de una secundaria suele llevar días: cruzar materias, disponibilidades de cada profesor y evitar superposiciones, todo a mano.
+
+Para eso hice Puntual. Con las materias, los cursos y los profesores cargados, el sistema genera el horario completo automáticamente. Los docentes envían su disponibilidad por mail completando un formulario, esa información entra al sistema sin que nadie la tenga que transcribir, y después cada uno recibe su horario final de la misma forma.
+
+Hay una prueba gratuita para que lo vean con los datos de su propia escuela: www.puntualhorarios.com
+
+Quedo a disposición para lo que necesiten.
+
+Saludos,
+Andy
+Puntual
+
+${PIE_BAJA}`,
+  }),
+
+  // Versión 4 — más personal
+  (equipo) => ({
+    asunto: "Una herramienta argentina para el horario de su escuela",
+    cuerpo: `Hola, ¿cómo están? Les escribo al equipo ${equipo}.
+
+Soy Andy, desarrollador, y hace un tiempo armé Puntual, una aplicación hecha en Argentina para que las escuelas secundarias generen su horario semanal sin cruces y sin tener que resolverlo a mano.
+
+La idea es simplificarle el trabajo a quien arma el horario: los profesores envían su disponibilidad por mail completando un formulario, se incorpora al sistema automáticamente, y después cada uno recibe su horario actualizado sin que nadie tenga que reenviar planillas.
+
+Pueden probarlo gratis cuando quieran en www.puntualhorarios.com (hay un video paso a paso en la página).
+
+Cualquier consulta, me escriben.
+
+Un saludo,
+Andy — Puntual
+
+${PIE_BAJA}`,
+  }),
+];
+
+function armarMail(escuela, indiceVersion) {
+  const equipo = conArticulo(capitalizar(escuela.nombre));
+  const i = indiceVersion ?? azar(0, VERSIONES.length);
+  return { version: i + 1, ...VERSIONES[i](equipo) };
+}
+
+// ─── CONTROLES (solo corridas programadas) ───────────────────────────────────
+
+// Medianoche de hoy en Argentina (UTC-3), expresada en UTC
+function inicioDelDiaArgentina() {
+  const ahoraAR = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const fecha = ahoraAR.toISOString().slice(0, 10);
+  return new Date(`${fecha}T03:00:00.000Z`).toISOString();
+}
+
+async function puedeEnviarAhora() {
+  const { count, error: errCount } = await supabase
+    .from(TABLA)
+    .select("id", { count: "exact", head: true })
+    .eq("enviado", true)
+    .gte("fecha_envio", inicioDelDiaArgentina());
+  if (errCount) throw new Error(`No se pudo contar los envíos de hoy: ${errCount.message}`);
+  if (count >= MAX_POR_DIA) {
+    console.log(`⏸️ Hoy ya salieron ${count} mails (tope ${MAX_POR_DIA}). No mando nada en esta corrida.`);
+    return false;
+  }
+
+  const { data: ultimo, error: errUlt } = await supabase
+    .from(TABLA)
+    .select("fecha_envio")
+    .eq("enviado", true)
+    .not("fecha_envio", "is", null)
+    .order("fecha_envio", { ascending: false })
+    .limit(1);
+  if (errUlt) throw new Error(`No se pudo leer el último envío: ${errUlt.message}`);
+  if (ultimo && ultimo.length) {
+    const minutos = (Date.now() - new Date(ultimo[0].fecha_envio).getTime()) / 60000;
+    if (minutos < SEPARACION_MINIMA_MIN) {
+      console.log(`⏸️ El último mail salió hace ${Math.round(minutos)} min (mínimo ${SEPARACION_MINIMA_MIN}). No mando nada en esta corrida.`);
+      return false;
+    }
+  }
+
+  console.log(`✅ Hoy van ${count} de ${MAX_POR_DIA}. Se puede enviar.`);
+  return true;
 }
 
 // ─── ENVÍO ───────────────────────────────────────────────────────────────────
@@ -120,9 +230,7 @@ function esRechazoDelDestinatario(err) {
   return typeof codigo === "number" && codigo >= 500 && codigo < 600;
 }
 
-async function main() {
-  console.log(MODO_PRUEBA ? `🧪 MODO PRUEBA → se envía 1 mail a ${EMAIL_PRUEBA}` : `📨 Envío real → hasta ${CANTIDAD} mails`);
-
+async function conectarGmail() {
   try {
     await transporter.verify();
     console.log(`✅ Gmail conectado (${process.env.GMAIL_USER})`);
@@ -131,6 +239,34 @@ async function main() {
     console.error(`   Detalle: ${err.message}`);
     process.exit(1);
   }
+}
+
+async function modoPrueba() {
+  console.log(`🧪 MODO PRUEBA → se mandan las ${VERSIONES.length} versiones a ${EMAIL_PRUEBA}`);
+  await conectarGmail();
+  const ejemplo = { nombre: "INSTITUTO SANTA ROSA" };
+  for (let i = 0; i < VERSIONES.length; i++) {
+    const mail = armarMail(ejemplo, i);
+    await transporter.sendMail({
+      from: `"Puntual" <${process.env.GMAIL_USER}>`,
+      to: EMAIL_PRUEBA,
+      replyTo: process.env.GMAIL_USER,
+      subject: `[PRUEBA v${mail.version}] ${mail.asunto}`,
+      text: mail.cuerpo,
+    });
+    console.log(`   ✅ Versión ${mail.version} enviada`);
+    if (i < VERSIONES.length - 1) await esperar(30 * 1000);
+  }
+}
+
+async function main() {
+  if (MODO_PRUEBA) return modoPrueba();
+
+  console.log(ES_MANUAL ? `📨 Corrida manual → hasta ${CANTIDAD} mails` : "📨 Corrida programada → 1 mail");
+
+  if (!ES_MANUAL && !(await puedeEnviarAhora())) return;
+
+  await conectarGmail();
 
   const { data: escuelas, error } = await supabase
     .from(TABLA)
@@ -156,30 +292,25 @@ async function main() {
 
   for (let i = 0; i < escuelas.length; i++) {
     const escuela = escuelas[i];
-    const destino = MODO_PRUEBA ? EMAIL_PRUEBA : escuela.email;
     const mail = armarMail(escuela);
-    console.log(`\n[${i + 1}/${escuelas.length}] ${escuela.nombre} → ${destino}`);
+    console.log(`\n[${i + 1}/${escuelas.length}] ${escuela.nombre} → ${escuela.email} (versión ${mail.version})`);
 
     try {
       await transporter.sendMail({
         from: `"Puntual" <${process.env.GMAIL_USER}>`,
-        to: destino,
+        to: escuela.email,
         replyTo: process.env.GMAIL_USER,
-        subject: MODO_PRUEBA ? `[PRUEBA] ${mail.asunto}` : mail.asunto,
+        subject: mail.asunto,
         text: mail.cuerpo,
       });
       enviados++;
       console.log("   ✅ Enviado");
 
-      if (MODO_PRUEBA) {
-        console.log("\n--- Vista previa del mail ---\n" + mail.cuerpo + "\n-----------------------------");
-      } else {
-        const { error: errUpd } = await supabase
-          .from(TABLA)
-          .update({ enviado: true, fecha_envio: new Date().toISOString(), error: null })
-          .eq("id", escuela.id);
-        if (errUpd) console.warn(`   ⚠️ Enviado, pero no se pudo marcar en Supabase: ${errUpd.message}`);
-      }
+      const { error: errUpd } = await supabase
+        .from(TABLA)
+        .update({ enviado: true, fecha_envio: new Date().toISOString(), error: null })
+        .eq("id", escuela.id);
+      if (errUpd) console.warn(`   ⚠️ Enviado, pero no se pudo marcar en Supabase: ${errUpd.message}`);
     } catch (err) {
       if (err.code === "EAUTH") {
         console.error("❌ Gmail rechazó el usuario o la contraseña. Corto la corrida.");
@@ -188,12 +319,10 @@ async function main() {
       if (esRechazoDelDestinatario(err)) {
         rechazados++;
         console.warn(`   🚫 Dirección rechazada (${err.responseCode}): ${err.message}`);
-        if (!MODO_PRUEBA) {
-          await supabase
-            .from(TABLA)
-            .update({ error: `${err.responseCode}: ${String(err.message).slice(0, 300)}` })
-            .eq("id", escuela.id);
-        }
+        await supabase
+          .from(TABLA)
+          .update({ error: `${err.responseCode}: ${String(err.message).slice(0, 300)}` })
+          .eq("id", escuela.id);
       } else {
         fallidos++;
         console.warn(`   ⚠️ Falló el envío (se reintenta en otra corrida): ${err.message}`);
