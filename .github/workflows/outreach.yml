@@ -2,17 +2,23 @@ name: Puntual Outreach Diario
 
 on:
   schedule:
-    # Lunes a viernes, 9:00 AM Argentina (12:00 UTC).
-    # GitHub puede demorar los workflows programados un par de horas.
-    - cron: "0 12 * * 1-5"
+    # Lunes a viernes, 1 mail por corrida, cerca de las 9, 11, 13, 15 y 17 h de Argentina.
+    # (Los horarios están en UTC = Argentina + 3 h. Los minutos van corridos a propósito
+    # para no caer en la hora en punto, cuando GitHub está más cargado.)
+    # Si GitHub demora y dos corridas caen juntas, el script se saltea la segunda.
+    - cron: "7 12 * * 1-5"
+    - cron: "13 14 * * 1-5"
+    - cron: "4 16 * * 1-5"
+    - cron: "11 18 * * 1-5"
+    - cron: "9 20 * * 1-5"
   workflow_dispatch:
     inputs:
       email_prueba:
-        description: "Modo prueba: genera UN mail y lo manda a esta dirección (no a la escuela). Dejar vacío para envío real."
+        description: "Modo prueba: manda las 4 versiones del mail a esta dirección (no a escuelas). Dejar vacío para envío real."
         required: false
         default: ""
       cantidad:
-        description: "Envío real: cantidad de mails (vacío = usar la variable MAX_EMAILS_POR_DIA)"
+        description: "Envío real manual: cantidad de mails a mandar ahora (vacío = 1, respetando el tope diario)"
         required: false
         default: ""
 
@@ -24,7 +30,7 @@ concurrency:
 jobs:
   outreach:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repo
