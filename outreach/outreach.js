@@ -3,8 +3,8 @@
  *
  * Lee las escuelas pendientes de la tabla `escuelas_outreach` (Supabase),
  * arma el mail eligiendo al azar una de 4 versiones de texto y lo envía por Gmail.
- * Corre en GitHub Actions (.github/workflows/outreach.yml), 5 veces por día hábil,
- * mandando 1 mail por corrida.
+ * Corre en GitHub Actions (.github/workflows/outreach.yml), una vez por hora en días hábiles,
+ * mandando como máximo 1 mail por corrida (hasta MAX_EMAILS_POR_DIA por día).
  *
  * Variables de entorno (GitHub Secrets / Variables):
  *   GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY  (secrets)
@@ -21,6 +21,8 @@ const nodemailer = require("nodemailer");
 const TABLA = "escuelas_outreach";
 const LIMITE_MAXIMO = 20; // tope de seguridad por corrida manual
 const SEPARACION_MINIMA_MIN = 90; // no mandar si el último mail salió hace menos de esto
+const HORA_INICIO_AR = 8; // corridas programadas: no mandar antes de las 8 h de Argentina
+const HORA_FIN_AR = 19; // ni a partir de las 19 h de Argentina
 const ESPERA_MIN_MS = 2 * 60 * 1000; // en corridas manuales de varios mails: 2 a 4 min entre mails
 const ESPERA_MAX_MS = 4 * 60 * 1000;
 
@@ -158,7 +160,7 @@ ${PIE_BAJA}`,
   // Versión 4 — más personal
   (equipo) => ({
     asunto: "Una herramienta argentina para el horario de su escuela",
-    cuerpo: `Hola, ¿cómo están? Les escribo al equipo ${equipo}.
+    cuerpo: `Hola, equipo ${equipo}, ¿cómo están?
 
 Soy Andy, desarrollador, y hace un tiempo armé Puntual, una aplicación hecha en Argentina para que las escuelas secundarias generen su horario semanal sin cruces y sin tener que resolverlo a mano.
 
@@ -183,6 +185,11 @@ function armarMail(escuela, indiceVersion) {
 
 // ─── CONTROLES (solo corridas programadas) ───────────────────────────────────
 
+// Hora actual en Argentina (UTC-3), de 0 a 23
+function horaArgentina() {
+  return (new Date().getUTCHours() + 21) % 24;
+}
+
 // Medianoche de hoy en Argentina (UTC-3), expresada en UTC
 function inicioDelDiaArgentina() {
   const ahoraAR = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -191,6 +198,12 @@ function inicioDelDiaArgentina() {
 }
 
 async function puedeEnviarAhora() {
+  const hora = horaArgentina();
+  if (hora < HORA_INICIO_AR || hora >= HORA_FIN_AR) {
+    console.log(`⏸️ Son las ${hora} h en Argentina, fuera del horario de envío (${HORA_INICIO_AR} a ${HORA_FIN_AR} h). No mando nada en esta corrida.`);
+    return false;
+  }
+
   const { count, error: errCount } = await supabase
     .from(TABLA)
     .select("id", { count: "exact", head: true })
@@ -218,7 +231,7 @@ async function puedeEnviarAhora() {
     }
   }
 
-  console.log(`✅ Hoy van ${count} de ${MAX_POR_DIA}. Se puede enviar.`);
+  console.log(`✅ Son las ${hora} h en Argentina. Hoy van ${count} de ${MAX_POR_DIA}. Se puede enviar.`);
   return true;
 }
 
