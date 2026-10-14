@@ -5,6 +5,8 @@
  * arma el mail eligiendo al azar una de 4 versiones de texto y lo envía por Gmail.
  * Corre en GitHub Actions (.github/workflows/outreach.yml), una vez por hora en días hábiles,
  * mandando como máximo 1 mail por corrida (hasta MAX_EMAILS_POR_DIA por día).
+ * Antes de cada envío verifica por DNS que el dominio del mail exista y reciba correo;
+ * si no, marca la escuela con error "dominio inválido" y pasa a la siguiente sin mandar.
  *
  * Variables de entorno (GitHub Secrets / Variables):
  *   GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY  (secrets)
@@ -15,6 +17,7 @@
 
 const { createClient } = require("@supabase/supabase-js");
 const nodemailer = require("nodemailer");
+const dns = require("dns").promises;
 
 // ─── CONFIGURACIÓN ───────────────────────────────────────────────────────────
 
@@ -25,6 +28,7 @@ const HORA_INICIO_AR = 8; // corridas programadas: no mandar antes de las 8 h de
 const HORA_FIN_AR = 19; // ni a partir de las 19 h de Argentina
 const ESPERA_MIN_MS = 2 * 60 * 1000; // en corridas manuales de varios mails: 2 a 4 min entre mails
 const ESPERA_MAX_MS = 4 * 60 * 1000;
+const CANDIDATOS_EXTRA = 15; // escuelas de reserva por si algunas tienen el dominio inválido
 
 const requeridas = ["GMAIL_USER", "GMAIL_APP_PASSWORD", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"];
 const faltantes = requeridas.filter((v) => !process.env[v]);
@@ -235,6 +239,53 @@ async function puedeEnviarAhora() {
   return true;
 }
 
+// ─── VALIDACIÓN DE LA DIRECCIÓN (antes de mandar) ────────────────────────────
+
+const FORMATO_EMAIL = /^[^\s@]+@([a-z0-9-]+\.)+[a-z]{2,}$/i;
+const ERRORES_DNS_DEFINITIVOS = ["ENOTFOUND", "ENODATA", "ENONAME", "NXDOMAIN"];
+
+/**
+ * Revisa si el dominio del mail existe y puede recibir correo.
+ * Devuelve:
+ *   { ok: true }                          → se puede mandar
+ *   { ok: false, definitivo: true, motivo } → dirección inválida: se marca en Supabase y no se manda nunca
+ *   { ok: false, definitivo: false, motivo } → falla temporal del DNS: se saltea y se reintenta otro día
+ */
+async function validarEmail(email) {
+  const dir = String(email || "").trim().toLowerCase();
+  if (!FORMATO_EMAIL.test(dir)) {
+    return { ok: false, definitivo: true, motivo: `formato inválido: "${dir}"` };
+  }
+  const dominio = dir.split("@")[1];
+
+  try {
+    const mx = await dns.resolveMx(dominio);
+    if (mx && mx.some((r) => r.exchange && r.exchange !== ".")) return { ok: true };
+    return { ok: false, definitivo: true, motivo: `el dominio ${dominio} no acepta correo` };
+  } catch (err) {
+    if (!ERRORES_DNS_DEFINITIVOS.includes(err.code)) {
+      return { ok: false, definitivo: false, motivo: `DNS no respondió (${err.code})` };
+    }
+    // Sin registro MX: algunos dominios igual reciben correo en su propia IP
+    try {
+      const ips = await dns.resolve4(dominio);
+      if (ips && ips.length) return { ok: true };
+    } catch (_) { /* sigue abajo */ }
+    return { ok: false, definitivo: true, motivo: `el dominio ${dominio} no existe` };
+  }
+}
+
+// Control de seguridad: si ni siquiera gmail.com resuelve, el DNS está caído
+// y no hay que marcar ninguna escuela como inválida.
+async function dnsFunciona() {
+  try {
+    const mx = await dns.resolveMx("gmail.com");
+    return Array.isArray(mx) && mx.length > 0;
+  } catch (_) {
+    return false;
+  }
+}
+
 // ─── ENVÍO ───────────────────────────────────────────────────────────────────
 
 function esRechazoDelDestinatario(err) {
@@ -281,13 +332,18 @@ async function main() {
 
   await conectarGmail();
 
+  if (!(await dnsFunciona())) {
+    console.error("❌ El DNS no responde (no se pudo verificar ni gmail.com). No mando ni marco nada; se reintenta en la próxima corrida.");
+    process.exit(1);
+  }
+
   const { data: escuelas, error } = await supabase
     .from(TABLA)
     .select("id, nombre, email")
     .eq("enviado", false)
     .is("error", null)
     .order("id", { ascending: true })
-    .limit(CANTIDAD);
+    .limit(CANTIDAD + CANDIDATOS_EXTRA);
 
   if (error) {
     console.error("❌ Error leyendo Supabase. Revisá SUPABASE_URL y SUPABASE_SERVICE_KEY.");
@@ -302,11 +358,39 @@ async function main() {
   let enviados = 0;
   let rechazados = 0;
   let fallidos = 0;
+  let descartados = 0;
+  let intentos = 0;
 
-  for (let i = 0; i < escuelas.length; i++) {
+  for (let i = 0; i < escuelas.length && intentos < CANTIDAD; i++) {
     const escuela = escuelas[i];
+
+    // Chequeo previo: si el dominio no existe, se marca y se pasa a la siguiente sin mandar
+    const chequeo = await validarEmail(escuela.email);
+    if (!chequeo.ok) {
+      console.log(`\n⛔ ${escuela.nombre} → ${escuela.email}: ${chequeo.motivo}`);
+      if (chequeo.definitivo) {
+        descartados++;
+        const { error: errMarca } = await supabase
+          .from(TABLA)
+          .update({ error: `dominio inválido: ${chequeo.motivo}` })
+          .eq("id", escuela.id);
+        if (errMarca) console.warn(`   ⚠️ No se pudo marcar en Supabase: ${errMarca.message}`);
+        else console.log("   Marcada en Supabase, no se le va a mandar nunca.");
+      } else {
+        console.log("   La salteo por hoy, se reintenta en otra corrida.");
+      }
+      continue;
+    }
+
+    if (intentos > 0) {
+      const ms = azar(ESPERA_MIN_MS, ESPERA_MAX_MS);
+      console.log(`   ⏳ Espero ${Math.round(ms / 1000)} s antes del próximo...`);
+      await esperar(ms);
+    }
+    intentos++;
+
     const mail = armarMail(escuela);
-    console.log(`\n[${i + 1}/${escuelas.length}] ${escuela.nombre} → ${escuela.email} (versión ${mail.version})`);
+    console.log(`\n[${intentos}/${CANTIDAD}] ${escuela.nombre} → ${escuela.email} (versión ${mail.version})`);
 
     try {
       await transporter.sendMail({
@@ -341,15 +425,9 @@ async function main() {
         console.warn(`   ⚠️ Falló el envío (se reintenta en otra corrida): ${err.message}`);
       }
     }
-
-    if (i < escuelas.length - 1) {
-      const ms = azar(ESPERA_MIN_MS, ESPERA_MAX_MS);
-      console.log(`   ⏳ Espero ${Math.round(ms / 1000)} s antes del próximo...`);
-      await esperar(ms);
-    }
   }
 
-  console.log(`\n📊 Resumen: ${enviados} enviados, ${rechazados} rechazados, ${fallidos} con error temporal.`);
+  console.log(`\n📊 Resumen: ${enviados} enviados, ${rechazados} rechazados, ${fallidos} con error temporal, ${descartados} descartadas por dominio inexistente.`);
   if (enviados === 0) process.exit(1); // la corrida queda en rojo si no salió ninguno
 }
 
