@@ -90,6 +90,9 @@ function PlanesContent() {
   useEffect(() => {
     if (autopago && !autopagoDisparado.current) {
       autopagoDisparado.current = true;
+      // Sacamos ?autopago de la dirección para que recargar o volver a la
+      // página no dispare otro pedido (u otro pago).
+      window.history.replaceState(null, "", "/planes");
       handlePago(autopago);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
