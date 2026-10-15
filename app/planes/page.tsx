@@ -4,6 +4,16 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+// Mientras no esté listo el cobro, "Contratar" registra un pedido y avisa por mail
+// (ver /api/solicitud-plan) en vez de mandar a Mercado Pago.
+// Para volver a cobrar con Mercado Pago, cambiar a: const COBRO_ACTIVO = true;
+const COBRO_ACTIVO = false;
+
+const NOMBRE_PLAN: Record<string, string> = {
+  "estandar-1mes": "Plan Estándar",
+  "completo-1mes": "Plan Completo",
+};
+
 function PlanesContent() {
   const searchParams = useSearchParams();
   const motivo   = searchParams.get("motivo");
@@ -11,6 +21,8 @@ function PlanesContent() {
   const autopago = searchParams.get("autopago");
   const [loadingPlan, setLoadingPlan]   = useState<string | null>(null);
   const [tipoCambio, setTipoCambio]     = useState<number | null>(null);
+  const [pedido, setPedido]             = useState<"ok" | "error" | null>(null);
+  const [planPedido, setPlanPedido]     = useState<string | null>(null);
   const autopagoDisparado = useRef(false);
 
   useEffect(() => {
@@ -36,6 +48,22 @@ function PlanesContent() {
         return;
       }
 
+      if (!COBRO_ACTIVO) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch("/api/solicitud-plan", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token ?? ""}`,
+          },
+          body: JSON.stringify({ planId }),
+        });
+        setPlanPedido(planId);
+        setPedido(res.ok ? "ok" : "error");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
       const res = await fetch("/api/payments/create-preference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -50,7 +78,8 @@ function PlanesContent() {
       }
     } catch (err) {
       console.error(err);
-      alert("Error al iniciar el pago.");
+      if (!COBRO_ACTIVO) setPedido("error");
+      else alert("Error al iniciar el pago.");
     } finally {
       setLoadingPlan(null);
     }
@@ -102,9 +131,23 @@ function PlanesContent() {
             ⏰ Tu período de acceso venció. Elegí un plan para seguir usando Puntual.
           </div>
         )}
-        {autopago && (
+        {pedido === "ok" && (
+          <div style={{ background: "rgba(79,247,168,.12)", border: "1px solid rgba(79,247,168,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#4ff7a8", textAlign: "center", lineHeight: 1.6 }}>
+            ✅ ¡Recibimos tu pedido del {NOMBRE_PLAN[planPedido ?? ""] ?? "plan"}! En menos de 24 horas hábiles te escribimos por mail para coordinar el pago y la activación.
+          </div>
+        )}
+        {pedido === "error" && (
+          <div style={{ background: "rgba(247,79,106,.12)", border: "1px solid rgba(247,79,106,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#f74f6a", textAlign: "center", lineHeight: 1.6 }}>
+            No pudimos registrar tu pedido. Escribinos a{" "}
+            <a href="mailto:puntualhorarios@gmail.com?subject=Quiero contratar un plan" style={{ color: "#f74f6a", fontWeight: 700 }}>puntualhorarios@gmail.com</a>{" "}
+            y lo resolvemos enseguida.
+          </div>
+        )}
+        {autopago && !pedido && (
           <div style={{ background: "rgba(79,142,247,.12)", border: "1px solid rgba(79,142,247,.3)", borderRadius: 12, padding: "16px 20px", marginBottom: 32, fontSize: 14, color: "#4f8ef7", textAlign: "center" }}>
-            🔐 ¡Listo, ya iniciaste sesión! Te estamos redirigiendo a MercadoPago para completar la compra...
+            {COBRO_ACTIVO
+              ? "🔐 ¡Listo, ya iniciaste sesión! Te estamos redirigiendo a MercadoPago para completar la compra..."
+              : "🔐 ¡Listo, ya iniciaste sesión! Estamos registrando tu pedido..."}
           </div>
         )}
         {pago === "exitoso" && (
@@ -187,7 +230,7 @@ function PlanesContent() {
             </ul>
             <div className="plan-buttons">
               <button className="btn-primary" disabled={!!loadingPlan} onClick={() => handlePago("estandar-1mes")}>
-                {loadingPlan === "estandar-1mes" ? "Redirigiendo..." : "Contratar plan estándar →"}
+                {loadingPlan === "estandar-1mes" ? (COBRO_ACTIVO ? "Redirigiendo..." : "Enviando pedido...") : "Contratar plan estándar →"}
               </button>
             </div>
           </div>
@@ -212,7 +255,7 @@ function PlanesContent() {
             </ul>
             <div className="plan-buttons">
               <button className="btn-primary" disabled={!!loadingPlan} onClick={() => handlePago("completo-1mes")}>
-                {loadingPlan === "completo-1mes" ? "Redirigiendo..." : "Contratar plan completo →"}
+                {loadingPlan === "completo-1mes" ? (COBRO_ACTIVO ? "Redirigiendo..." : "Enviando pedido...") : "Contratar plan completo →"}
               </button>
             </div>
           </div>
