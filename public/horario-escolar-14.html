@@ -1204,6 +1204,12 @@ function renderPanel(name) {
 //  MODAL
 // ═══════════════════════════════════
 function openModal(id, skipPrep=false) {
+  // Alta nueva (no edición): avisar del límite del plan ANTES de abrir el
+  // formulario, así no completan todo para que recién al guardar se rechace.
+  if (!skipPrep && typeof checkLimitePlan === 'function') {
+    if (id === 'modalCur'  && !checkLimitePlan('cursos'))     return;
+    if (id === 'modalProf' && !checkLimitePlan('profesores')) return;
+  }
   if (!skipPrep) {
     if (id === 'modalProf') prepModalProf();
     if (id === 'modalMat') prepModalMat();
