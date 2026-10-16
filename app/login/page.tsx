@@ -23,6 +23,8 @@ function LoginContent() {
   const [regPassword, setRegPassword] = useState("");
 
   const [olvideEmail, setOlvideEmail] = useState("");
+  // Mail que intentó entrar sin confirmar: habilita el botón "Reenviar"
+  const [sinConfirmar, setSinConfirmar] = useState("");
 
   const [showLoginPass, setShowLoginPass] = useState(false);
   const [showRegPass, setShowRegPass] = useState(false);
@@ -38,6 +40,9 @@ function LoginContent() {
     if (msg === "confirmado") {
       setTab("login");
       setSuccess("✅ ¡Email confirmado! Ahora iniciá sesión para acceder a la app.");
+    } else if (msg === "link_usado") {
+      setTab("login");
+      setSuccess("Ese link ya se usó o venció. Si ya confirmaste tu email, iniciá sesión. Si no, intentá entrar y te ofrecemos reenviarte el mail.");
     } else if (msg === "error") {
       setTab("login");
       setError("El link de confirmación no es válido o ya expiró. Intentá iniciar sesión o registrarte de nuevo.");
@@ -62,6 +67,8 @@ function LoginContent() {
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
+    setSinConfirmar("");
     setLoading(true);
 
     const { error: authError } = await supabase.auth.signInWithPassword({
@@ -72,7 +79,8 @@ function LoginContent() {
     if (authError) {
       setLoading(false);
       if (authError.code === "email_not_confirmed") {
-        setError("Todavía no confirmaste tu email. Revisá tu casilla (y la carpeta de spam) y hacé clic en el link que te mandamos.");
+        setError("Todavía no confirmaste tu email. Revisá tu casilla (y la carpeta de spam) y hacé clic en el link del último mail que te mandamos.");
+        setSinConfirmar(loginEmail.trim());
       } else {
         setError("Email o contraseña incorrectos. Si no la recordás, usá \"¿Olvidaste tu contraseña?\".");
       }
@@ -89,6 +97,29 @@ function LoginContent() {
     // La app (horario-escolar-14.html) decide con initPlan() qué mostrar
     // según el plan del usuario: banner de trial, redirect a /planes si venció, etc.
     window.location.href = "/horario-escolar-14.html";
+  }
+
+  // Reenvía el mail de confirmación de la cuenta
+  async function reenviarConfirmacion() {
+    setLoading(true);
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: sinConfirmar,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    setLoading(false);
+    if (resendError && resendError.status === 429) {
+      setError("Ya te mandamos un mail hace muy poco. Esperá unos minutos y volvé a intentar.");
+      return;
+    }
+    if (resendError) {
+      console.error("resend:", resendError);
+      setError("No pudimos reenviar el mail. Intentá de nuevo en unos minutos.");
+      return;
+    }
+    setError("");
+    setSinConfirmar("");
+    setSuccess("Te mandamos un mail nuevo de confirmación. Usá el link de ese mail (los anteriores ya no sirven).");
   }
 
   // Manda el mail con el link para elegir una contraseña nueva.
@@ -217,7 +248,19 @@ function LoginContent() {
             <div style={{
               background: "rgba(247,79,106,.12)", border: "1px solid rgba(247,79,106,.3)",
               borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#f74f6a", marginBottom: 20,
-            }}>{error}</div>
+            }}>
+              {error}
+              {sinConfirmar && (
+                <button
+                  type="button"
+                  onClick={reenviarConfirmacion}
+                  disabled={loading}
+                  style={{ ...linkBtnStyle, marginLeft: 0, marginTop: 10, fontWeight: 600 }}
+                >
+                  {loading ? "Enviando..." : "Reenviarme el mail de confirmación →"}
+                </button>
+              )}
+            </div>
           )}
           {success && (
             <div style={{
