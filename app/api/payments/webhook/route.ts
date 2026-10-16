@@ -36,25 +36,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true });
     }
 
-    // Calcular fechas
-    const ahora     = new Date();
-    const planVence = new Date(ahora);
+    if (planKey !== "estandar" && planKey !== "completo") {
+      console.error("Webhook: plan_key desconocido", planKey);
+      return NextResponse.json({ received: true });
+    }
+
+    const sbHeaders = {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_SERVICE_KEY,
+      "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
+    };
+    const filtro = `owner_id=eq.${encodeURIComponent(String(userId))}`;
+
+    // Estado actual de la escuela
+    const actualRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/escuelas?${filtro}&select=plan,plan_vence,mp_payment_id`,
+      { headers: sbHeaders }
+    );
+    const [escuela] = actualRes.ok ? await actualRes.json() : [];
+
+    // Mercado Pago avisa varias veces el mismo pago: si ya se aplicó, no sumar de nuevo
+    if (escuela?.mp_payment_id === String(paymentId)) {
+      return NextResponse.json({ received: true, ya_aplicado: true });
+    }
+
+    // Renovación: si tiene un plan pago todavía vigente, los meses se suman
+    // desde su vencimiento; si no, desde hoy.
+    const ahora = new Date();
+    const venceActual = escuela?.plan_vence ? new Date(escuela.plan_vence) : null;
+    const esPagoVigente =
+      ["estandar", "completo", "paid"].includes(escuela?.plan) && venceActual && venceActual > ahora;
+    const desde = esPagoVigente ? venceActual! : ahora;
+    const planVence = new Date(desde);
     planVence.setMonth(planVence.getMonth() + Number(meses));
 
     // Actualizar Supabase via REST API directamente
     const sbRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/escuelas?owner_id=eq.${userId}`,
+      `${SUPABASE_URL}/rest/v1/escuelas?${filtro}`,
       {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_SERVICE_KEY,
-          "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
-          "Prefer": "return=minimal",
-        },
+        headers: { ...sbHeaders, "Prefer": "return=minimal" },
         body: JSON.stringify({
           plan: planKey,
-          plan_inicio: ahora.toISOString(),
+          ...(esPagoVigente ? {} : { plan_inicio: ahora.toISOString() }),
           plan_vence: planVence.toISOString(),
           mp_payment_id: String(paymentId),
         }),
