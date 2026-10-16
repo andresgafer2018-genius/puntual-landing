@@ -71,8 +71,11 @@ function PlanesContent() {
       });
 
       const data = await res.json();
-      if (data.sandbox_init_point) {
-        window.location.href = data.sandbox_init_point;
+      // init_point es el checkout real; con credenciales de prueba (TEST-...)
+      // Mercado Pago igual lo resuelve en modo prueba.
+      const urlPago = data.init_point || data.sandbox_init_point;
+      if (urlPago) {
+        window.location.href = urlPago;
       } else {
         alert("Error al iniciar el pago. Intentá de nuevo.");
       }
