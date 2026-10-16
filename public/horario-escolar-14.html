@@ -6863,16 +6863,14 @@ function handleImport(e) {
 function _importExcedeLimites(d) {
   const u = state.user;
   if (!u) return null;
-  if (u.esAdmin || u.plan === 'admin' || u.plan === 'paid') return null;
+  const lim = _limitesDe(u);
   const nCursos = Array.isArray(d.cursos)     ? d.cursos.length     : state.cursos.length;
   const nProfes = Array.isArray(d.profesores) ? d.profesores.length : state.profesores.length;
   const exc = [];
-  if (nCursos > LIMITES_TRIAL.cursos)     exc.push(`• ${nCursos} cursos (máximo ${LIMITES_TRIAL.cursos})`);
-  if (nProfes > LIMITES_TRIAL.profesores) exc.push(`• ${nProfes} profesores (máximo ${LIMITES_TRIAL.profesores})`);
+  if (nCursos > lim.cursos)     exc.push(`• ${nCursos} cursos (máximo ${lim.cursos})`);
+  if (nProfes > lim.profesores) exc.push(`• ${nProfes} profesores (máximo ${lim.profesores})`);
   if (!exc.length) return null;
-  return `⚠️ No se importó el archivo: supera los límites del plan de prueba.\n\n` +
-         exc.join('\n') +
-         `\n\nPara cargar todo, pasate al plan pago desde /planes.`;
+  return _msgLimite(u, `⚠️ No se importó el archivo: supera los límites de tu plan.\n\n` + exc.join('\n'));
 }
 
 function importarDisponibilidadHTMLs(input) {
@@ -7130,6 +7128,27 @@ const SUPABASE_URL  = 'https://ictemkwmsqgktpxvvxjg.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_dD9nCSBl1xsl9rckxvfbMA_HmukQoBc';
 const LIMITES_TRIAL = { cursos: 5, profesores: 15 };
 
+// Límites por plan (Infinity = sin límite). Lo que vale es la columna `plan`
+// de la tabla escuelas: 'trial' al registrarse; 'estandar' o 'completo' al pagar
+// (lo pone el webhook de Mercado Pago o Andy a mano desde Supabase).
+// 'paid' se mantiene por compatibilidad y equivale a Completo.
+const LIMITES_PLAN = {
+  trial:    LIMITES_TRIAL,
+  free:     LIMITES_TRIAL,
+  estandar: { cursos: 12,       profesores: Infinity },
+  completo: { cursos: Infinity, profesores: Infinity },
+  paid:     { cursos: Infinity, profesores: Infinity },
+};
+const NOMBRE_PLAN = { trial: 'de prueba', free: 'de prueba', estandar: 'Estándar', completo: 'Completo', paid: 'Completo' };
+const PLANES_PAGOS = ['estandar', 'completo', 'paid'];
+const DIAS_AVISO_VENCIMIENTO = 5;
+
+function _esPlanPago(plan) { return PLANES_PAGOS.includes(plan); }
+function _limitesDe(u) {
+  if (!u || u.esAdmin || u.plan === 'admin') return { cursos: Infinity, profesores: Infinity };
+  return LIMITES_PLAN[u.plan] || LIMITES_TRIAL; // plan desconocido → límites de prueba
+}
+
 // Emails con acceso total de administrador (sin limites, sin vencimiento)
 const ADMIN_EMAILS = ['andresgafer2018@gmail.com']; // todo en minuscula
 
@@ -7161,7 +7180,7 @@ async function cerrarSesion() {
 
 // Inicializa state.user con datos del plan leídos de Supabase.
 // Si no hay sesión → redirige a /login.
-// Si plan está vencido y no es 'paid' → banner + redirige a /planes.
+// Si el plan (prueba o pago) está vencido → banner + redirige a /planes.
 async function initPlan() {
   const { data: { session } } = await _sb.auth.getSession();
   if (!session) {
@@ -7207,8 +7226,9 @@ async function initPlan() {
 
   const hoy = new Date();
   const vence = escuela.plan_vence ? new Date(escuela.plan_vence) : null;
+  // Vence cualquier plan (prueba o pago) cuando pasa plan_vence.
+  // Un plan pago sin fecha cargada no vence.
   const vencido = vence ? (vence < hoy) : false;
-  const esPago = escuela.plan === 'paid';
 
   state.user = {
     id: session.user.id,
@@ -7216,12 +7236,12 @@ async function initPlan() {
     escuelaId: escuela.id,
     plan: escuela.plan || 'free',
     plan_vence: escuela.plan_vence,
-    vencido: vencido && !esPago,
+    vencido,
   };
 
-  // Plan vencido y no es paid → banner + redirect
-  if (vencido && !esPago) {
-    mostrarBannerVencido();
+  // Plan vencido → banner + redirect a /planes
+  if (vencido) {
+    mostrarBannerVencido(_esPlanPago(state.user.plan));
     setTimeout(() => { window.location.href = '/planes'; }, 2500);
     return false;
   }
@@ -7234,13 +7254,21 @@ async function initPlan() {
 function renderBannerPlan() {
   const u = state.user;
   if (!u) return;
-if (u.plan === 'paid' && !u.vencido) return; // paid vigente → sin banner
-
   const vence = u.plan_vence ? new Date(u.plan_vence) : null;
   const hoy = new Date();
   let diasRestantes = null;
   if (vence) {
     diasRestantes = Math.ceil((vence - hoy) / (1000 * 60 * 60 * 24));
+  }
+
+  // Plan pago vigente: sin banner, salvo aviso cuando falta poco para vencer
+  if (_esPlanPago(u.plan)) {
+    if (diasRestantes !== null && diasRestantes <= DIAS_AVISO_VENCIMIENTO) {
+      _pintarBanner(
+        `⏰ Tu plan ${NOMBRE_PLAN[u.plan]} vence en ${diasRestantes} día${diasRestantes === 1 ? '' : 's'}`,
+        '#FEF3C7', '#92400E', '/planes', 'Renovar →');
+    }
+    return;
   }
 
   const msg = diasRestantes !== null
@@ -7250,9 +7278,11 @@ if (u.plan === 'paid' && !u.vencido) return; // paid vigente → sin banner
   _pintarBanner(msg, '#FEF3C7', '#92400E', '/planes', 'Pasar a plan pago →');
 }
 
-function mostrarBannerVencido() {
+function mostrarBannerVencido(eraPago) {
   _pintarBanner(
-    '⚠️ Tu plan venció. Redirigiéndote a la página de planes…',
+    eraPago
+      ? '⚠️ Tu plan venció. Tus datos quedan guardados: renovalo para seguir usando Puntual. Redirigiéndote…'
+      : '⚠️ Tu prueba gratuita terminó. Tus datos quedan guardados. Redirigiéndote a la página de planes…',
     '#FEE2E2', '#991B1B', null, null
   );
 }
@@ -7273,22 +7303,28 @@ function _pintarBanner(texto, bg, color, href, cta) {
     (href && cta ? ` <a href="${href}" style="color:${color};text-decoration:underline;font-weight:600;">${cta}</a>` : '');
 }
 
+// Texto del aviso de límite según el plan
+function _msgLimite(u, detalle) {
+  if (u.plan === 'estandar') {
+    return `${detalle}\n\nTu plan Estándar incluye hasta ${LIMITES_PLAN.estandar.cursos} cursos. ` +
+           `Para más cursos, pasate al plan Completo desde /planes o escribinos a puntualhorarios@gmail.com.`;
+  }
+  return `${detalle}\n\nEl plan de prueba permite ${LIMITES_TRIAL.cursos} cursos y ${LIMITES_TRIAL.profesores} profesores. ` +
+         `Para cargar más, pasate a un plan pago desde /planes.`;
+}
+
 // Gate llamado desde saveCurso / saveProfesor antes de agregar
 // Devuelve true si se puede agregar, false si se bloquea (y avisa al usuario)
 function checkLimitePlan(tipo) {
   const u = state.user;
   if (!u) return true;              // sin datos de plan → no bloquear (fallback)
-  if (u.esAdmin || u.plan === 'admin') return true; // admin → sin límites
-  if (u.plan === 'paid') return true; // pago → sin límites
+  const limite = _limitesDe(u)[tipo];
+  if (limite === Infinity) return true;
 
   const actual = tipo === 'cursos' ? state.cursos.length : state.profesores.length;
-  const limite = LIMITES_TRIAL[tipo];
 
   if (actual >= limite) {
-    alert(
-      `Límite del plan de prueba alcanzado: ${limite} ${tipo}.\n\n` +
-      `Para agregar más, pasate al plan pago desde /planes.`
-    );
+    alert(_msgLimite(u, `Límite alcanzado: ${limite} ${tipo}.`));
     return false;
   }
   return true;
