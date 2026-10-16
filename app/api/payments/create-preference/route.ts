@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN!;
 
 const PLANES: Record<string, { title: string; usd: number; plan_key: string; meses: number }> = {
-  "estandar-1mes":   { title: "Plan Estándar 1 mes",   usd: 199, plan_key: "estandar", meses: 1 },
-  "estandar-2meses": { title: "Plan Estándar 2 meses", usd: 299, plan_key: "estandar", meses: 2 },
-  "completo-1mes":   { title: "Plan Completo 1 mes",   usd: 299, plan_key: "completo", meses: 1 },
-  "completo-2meses": { title: "Plan Completo 2 meses", usd: 400, plan_key: "completo", meses: 2 },
+  // Precios en USD: tienen que coincidir con los que muestra /planes (99 y 119 por mes)
+  "estandar-1mes":   { title: "Plan Estándar 1 mes",   usd: 99,  plan_key: "estandar", meses: 1 },
+  "estandar-2meses": { title: "Plan Estándar 2 meses", usd: 198, plan_key: "estandar", meses: 2 },
+  "completo-1mes":   { title: "Plan Completo 1 mes",   usd: 119, plan_key: "completo", meses: 1 },
+  "completo-2meses": { title: "Plan Completo 2 meses", usd: 238, plan_key: "completo", meses: 2 },
 };
 
 async function getDolarOficial(): Promise<number> {
