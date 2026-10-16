@@ -10,9 +10,11 @@ export async function GET(request: NextRequest) {
 
   // Si Supabase mandó un error explícito
   if (error) {
-    // otp_expired/otp_already_used = link ya usado → el email YA estaba confirmado
+    // otp_expired/otp_already_used = link vencido o ya usado. No sabemos si la
+    // cuenta quedó confirmada, así que no decimos "confirmado": el login avisa
+    // y, si falta confirmar, ofrece reenviar el mail.
     if (errorCode === "otp_expired" || errorCode === "otp_already_used") {
-      return NextResponse.redirect(`${origin}/login?msg=confirmado`);
+      return NextResponse.redirect(`${origin}/login?msg=link_usado`);
     }
     return NextResponse.redirect(`${origin}/login?msg=error`);
   }
@@ -75,3 +77,4 @@ export async function GET(request: NextRequest) {
   // El usuario ya está autenticado en el cliente, solo necesita el aviso
   return NextResponse.redirect(`${origin}/login?msg=confirmado`);
 }
+
