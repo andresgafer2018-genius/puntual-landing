@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Suspense } from "react";
 
-type Tab = "login" | "registro";
+type Tab = "login" | "registro" | "olvide";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -21,6 +21,8 @@ function LoginContent() {
   const [regEscuela, setRegEscuela] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
+
+  const [olvideEmail, setOlvideEmail] = useState("");
 
   const [showLoginPass, setShowLoginPass] = useState(false);
   const [showRegPass, setShowRegPass] = useState(false);
@@ -41,6 +43,11 @@ function LoginContent() {
       setError("El link de confirmación no es válido o ya expiró. Intentá iniciar sesión o registrarte de nuevo.");
     } else if (tabParam === "registro") {
       setTab("registro");
+    } else if (tabParam === "olvide") {
+      setTab("olvide");
+      if (msg === "link_vencido") {
+        setError("El link para cambiar la contraseña venció o ya se usó. Pedí uno nuevo.");
+      }
     } else if (redirectTo === "planes" && planPendiente) {
       setTab("login");
       setSuccess("Inicia sesión o crea una cuenta para continuar con la compra de tu plan.");
@@ -64,7 +71,11 @@ function LoginContent() {
 
     if (authError) {
       setLoading(false);
-      setError("Email o contraseña incorrectos.");
+      if (authError.code === "email_not_confirmed") {
+        setError("Todavía no confirmaste tu email. Revisá tu casilla (y la carpeta de spam) y hacé clic en el link que te mandamos.");
+      } else {
+        setError("Email o contraseña incorrectos. Si no la recordás, usá \"¿Olvidaste tu contraseña?\".");
+      }
       return;
     }
 
@@ -78,6 +89,30 @@ function LoginContent() {
     // La app (horario-escolar-14.html) decide con initPlan() qué mostrar
     // según el plan del usuario: banner de trial, redirect a /planes si venció, etc.
     window.location.href = "/horario-escolar-14.html";
+  }
+
+  // Manda el mail con el link para elegir una contraseña nueva.
+  // Siempre muestra el mismo mensaje, exista o no la cuenta, para no revelar
+  // qué mails están registrados.
+  async function handleOlvide(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setLoading(true);
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(olvideEmail.trim(), {
+      redirectTo: `${window.location.origin}/restablecer`,
+    });
+
+    setLoading(false);
+
+    if (resetError && resetError.status === 429) {
+      setError("Hiciste varios pedidos seguidos. Esperá unos minutos y volvé a intentar.");
+      return;
+    }
+    if (resetError) console.error("resetPasswordForEmail:", resetError);
+
+    setSuccess("Si ese email tiene una cuenta en Puntual, en unos minutos te llega un mail con un link para elegir una contraseña nueva. Revisá también la carpeta de spam.");
   }
 
   async function handleRegistro(e: React.FormEvent) {
@@ -203,9 +238,38 @@ function LoginContent() {
                   <input type={showLoginPass ? "text" : "password"} required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" style={{ ...inputStyle, paddingRight: 44 }} />
                   <PassToggle shown={showLoginPass} onToggle={() => setShowLoginPass(!showLoginPass)} />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { setTab("olvide"); setOlvideEmail(loginEmail); setError(""); setSuccess(""); }}
+                  style={linkBtnStyle}
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
               </div>
               <button type="submit" disabled={loading} style={btnStyle(loading)}>
                 {loading ? "Ingresando..." : "Iniciar sesión →"}
+              </button>
+            </form>
+          )}
+
+          {tab === "olvide" && (
+            <form onSubmit={handleOlvide} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <p style={{ fontSize: 14, color: "#8892b0", lineHeight: 1.6 }}>
+                Escribí el email con el que te registraste y te mandamos un link para elegir una contraseña nueva.
+              </p>
+              <div>
+                <label style={{ fontSize: 13, color: "#8892b0", fontWeight: 500, display: "block", marginBottom: 6 }}>Email</label>
+                <input type="email" required value={olvideEmail} onChange={(e) => setOlvideEmail(e.target.value)} placeholder="director@escuela.edu.ar" style={inputStyle} />
+              </div>
+              <button type="submit" disabled={loading} style={btnStyle(loading)}>
+                {loading ? "Enviando..." : "Enviarme el link →"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTab("login"); setError(""); setSuccess(""); }}
+                style={{ ...linkBtnStyle, alignSelf: "center", marginTop: 0 }}
+              >
+                ← Volver a iniciar sesión
               </button>
             </form>
           )}
@@ -256,6 +320,12 @@ const inputStyle: React.CSSProperties = {
   width: "100%", background: "#1a1f35", border: "1px solid #2a3050",
   borderRadius: 10, padding: "11px 14px", fontSize: 14, color: "#e8eaf2",
   fontFamily: "'DM Sans', sans-serif", transition: "border-color .2s",
+};
+
+const linkBtnStyle: React.CSSProperties = {
+  background: "none", border: "none", padding: 0, marginTop: 8, cursor: "pointer",
+  fontSize: 13, color: "#4f8ef7", fontFamily: "'DM Sans', sans-serif",
+  display: "block", marginLeft: "auto",
 };
 
 function btnStyle(loading: boolean): React.CSSProperties {
