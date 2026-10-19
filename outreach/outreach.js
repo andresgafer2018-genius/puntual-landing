@@ -351,6 +351,24 @@ function esRechazoDelDestinatario(err) {
   return typeof codigo === "number" && codigo >= 500 && codigo < 600;
 }
 
+// Errores de conexión con Gmail (corte, timeout): conviene esperar y reintentar
+const ERRORES_CONEXION = ["ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNRESET"];
+const REINTENTOS = 2;
+const ESPERA_REINTENTO_MS = 45 * 1000;
+
+async function enviarConReintento(mensaje) {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await transporter.sendMail(mensaje);
+    } catch (err) {
+      const esCorte = ERRORES_CONEXION.includes(err.code) || /connection closed/i.test(err.message || "");
+      if (!esCorte || intento >= REINTENTOS) throw err;
+      console.warn(`   🔁 Gmail cortó la conexión (${err.code || err.message}). Reintento en ${ESPERA_REINTENTO_MS / 1000} s...`);
+      await esperar(ESPERA_REINTENTO_MS);
+    }
+  }
+}
+
 async function conectarGmail() {
   try {
     await transporter.verify();
@@ -371,7 +389,7 @@ async function modoPrueba() {
   for (let i = 0; i < mails.length; i++) {
     const mail = mails[i];
     const etiqueta = mail.version === "seguimiento" ? "seguimiento" : `v${mail.version}`;
-    await transporter.sendMail({
+    await enviarConReintento({
       from: `"Puntual" <${process.env.GMAIL_USER}>`,
       to: EMAIL_PRUEBA,
       replyTo: process.env.GMAIL_USER,
@@ -379,7 +397,7 @@ async function modoPrueba() {
       text: mail.cuerpo,
     });
     console.log(`   ✅ ${etiqueta} enviado`);
-    if (i < mails.length - 1) await esperar(30 * 1000);
+    if (i < mails.length - 1) await esperar(60 * 1000);
   }
 }
 
@@ -496,7 +514,7 @@ async function main() {
     console.log(`\n[${intentos}/${CANTIDAD}] ${escuela.nombre} → ${escuela.email} (${tipo})`);
 
     try {
-      await transporter.sendMail({
+      await enviarConReintento({
         from: `"Puntual" <${process.env.GMAIL_USER}>`,
         to: escuela.email,
         replyTo: process.env.GMAIL_USER,
