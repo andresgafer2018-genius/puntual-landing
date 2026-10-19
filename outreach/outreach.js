@@ -8,10 +8,16 @@
  * Antes de cada envío verifica por DNS que el dominio del mail exista y reciba correo;
  * si no, marca la escuela con error "dominio inválido" y pasa a la siguiente sin mandar.
  *
+ * SEGUIMIENTO: a las escuelas que recibieron el primer mail hace DIAS_SEGUIMIENTO días o más
+ * se les manda un segundo mail corto, una sola vez. Comparte el tope diario con los mails nuevos:
+ * como máximo MAX_SEGUIMIENTOS_POR_DIA seguimientos por día (3 de 5), intercalados con los nuevos.
+ * Si un día no hay seguimientos vencidos, todos los mails del día son nuevos. No se manda a las que tienen no_seguir = true (contestaron
+ * o pidieron BAJA; eso se marca a mano en Supabase) ni a las que tienen algún error.
+ *
  * Variables de entorno (GitHub Secrets / Variables):
  *   GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY  (secrets)
  *   MAX_EMAILS_POR_DIA  (variable) → tope diario total, por defecto 5
- *   EMAIL_PRUEBA  (opcional) → modo prueba: manda las 4 versiones a esta dirección, no toca la base
+ *   EMAIL_PRUEBA  (opcional) → modo prueba: manda las 4 versiones + el seguimiento a esta dirección, no toca la base
  *   CANTIDAD      (opcional) → corrida manual: cuántos mails mandar ahora (saltea los controles de horario)
  */
 
@@ -29,6 +35,8 @@ const HORA_FIN_AR = 19; // ni a partir de las 19 h de Argentina
 const ESPERA_MIN_MS = 2 * 60 * 1000; // en corridas manuales de varios mails: 2 a 4 min entre mails
 const ESPERA_MAX_MS = 4 * 60 * 1000;
 const CANDIDATOS_EXTRA = 15; // escuelas de reserva por si algunas tienen el dominio inválido
+const DIAS_SEGUIMIENTO = 7; // el seguimiento sale a partir de estos días después del primer mail
+const MAX_SEGUIMIENTOS_POR_DIA = 3; // de los mails del día, como máximo estos son seguimientos (el resto, nuevos)
 
 const requeridas = ["GMAIL_USER", "GMAIL_APP_PASSWORD", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"];
 const faltantes = requeridas.filter((v) => !process.env[v]);
@@ -187,6 +195,36 @@ function armarMail(escuela, indiceVersion) {
   return { version: i + 1, ...VERSIONES[i](equipo) };
 }
 
+// ─── TEXTO DEL SEGUIMIENTO (segundo mail, una sola vez) ──────────────────────
+
+// "del Instituto X" → "en el Instituto X"; "de la Escuela X" → "en la Escuela X"; "de X" → "en X"
+function conEn(conArt) {
+  if (conArt.startsWith("del ")) return "en el " + conArt.slice(4);
+  if (conArt.startsWith("de la ")) return "en la " + conArt.slice(6);
+  return "en " + conArt.replace(/^de /, "");
+}
+
+function armarSeguimiento(escuela) {
+  const nombre = capitalizar(escuela.nombre);
+  const equipo = conArticulo(nombre);
+  return {
+    version: "seguimiento",
+    asunto: `¿Quién arma el horario ${conEn(equipo)}?`,
+    cuerpo: `Hola, equipo ${equipo}:
+
+Les escribí hace unos días por Puntual, la herramienta que genera automáticamente el horario semanal de la escuela, sin cruces entre profesores.
+
+Sé que es una época con mucho trabajo, así que voy al grano con una sola pregunta: ¿quién se encarga de armar el horario? Si me pasan su contacto, le escribo directamente a esa persona.
+
+Y si prefieren verlo por su cuenta, se puede probar gratis 15 días con los datos de la escuela: www.puntualhorarios.com
+
+Gracias y saludos,
+Andy — Puntual
+
+${PIE_BAJA}`,
+  };
+}
+
 // ─── CONTROLES (solo corridas programadas) ───────────────────────────────────
 
 // Hora actual en Argentina (UTC-3), de 0 a 23
@@ -201,6 +239,24 @@ function inicioDelDiaArgentina() {
   return new Date(`${fecha}T03:00:00.000Z`).toISOString();
 }
 
+// Cuántos mails nuevos y cuántos seguimientos salieron hoy (día de Argentina)
+async function contarEnviosDeHoy() {
+  const hoy = inicioDelDiaArgentina();
+  const { count: nuevosHoy, error: errCount } = await supabase
+    .from(TABLA)
+    .select("id", { count: "exact", head: true })
+    .eq("enviado", true)
+    .gte("fecha_envio", hoy);
+  if (errCount) throw new Error(`No se pudo contar los envíos de hoy: ${errCount.message}`);
+  const { count: seguimientosHoy, error: errCountSeg } = await supabase
+    .from(TABLA)
+    .select("id", { count: "exact", head: true })
+    .eq("seguimiento_enviado", true)
+    .gte("fecha_seguimiento", hoy);
+  if (errCountSeg) throw new Error(`No se pudo contar los seguimientos de hoy: ${errCountSeg.message}`);
+  return { nuevosHoy: nuevosHoy || 0, seguimientosHoy: seguimientosHoy || 0 };
+}
+
 async function puedeEnviarAhora() {
   const hora = horaArgentina();
   if (hora < HORA_INICIO_AR || hora >= HORA_FIN_AR) {
@@ -208,27 +264,28 @@ async function puedeEnviarAhora() {
     return false;
   }
 
-  const { count, error: errCount } = await supabase
-    .from(TABLA)
-    .select("id", { count: "exact", head: true })
-    .eq("enviado", true)
-    .gte("fecha_envio", inicioDelDiaArgentina());
-  if (errCount) throw new Error(`No se pudo contar los envíos de hoy: ${errCount.message}`);
+  // Envíos de hoy = primeros mails + seguimientos (comparten el mismo tope)
+  const { nuevosHoy, seguimientosHoy } = await contarEnviosDeHoy();
+  const count = nuevosHoy + seguimientosHoy;
   if (count >= MAX_POR_DIA) {
     console.log(`⏸️ Hoy ya salieron ${count} mails (tope ${MAX_POR_DIA}). No mando nada en esta corrida.`);
     return false;
   }
 
-  const { data: ultimo, error: errUlt } = await supabase
-    .from(TABLA)
-    .select("fecha_envio")
-    .eq("enviado", true)
-    .not("fecha_envio", "is", null)
-    .order("fecha_envio", { ascending: false })
-    .limit(1);
-  if (errUlt) throw new Error(`No se pudo leer el último envío: ${errUlt.message}`);
-  if (ultimo && ultimo.length) {
-    const minutos = (Date.now() - new Date(ultimo[0].fecha_envio).getTime()) / 60000;
+  // Último mail que salió, sea primero o seguimiento
+  const fechas = [];
+  for (const columna of ["fecha_envio", "fecha_seguimiento"]) {
+    const { data, error: errUlt } = await supabase
+      .from(TABLA)
+      .select(columna)
+      .not(columna, "is", null)
+      .order(columna, { ascending: false })
+      .limit(1);
+    if (errUlt) throw new Error(`No se pudo leer el último envío: ${errUlt.message}`);
+    if (data && data.length) fechas.push(new Date(data[0][columna]).getTime());
+  }
+  if (fechas.length) {
+    const minutos = (Date.now() - Math.max(...fechas)) / 60000;
     if (minutos < SEPARACION_MINIMA_MIN) {
       console.log(`⏸️ El último mail salió hace ${Math.round(minutos)} min (mínimo ${SEPARACION_MINIMA_MIN}). No mando nada en esta corrida.`);
       return false;
@@ -306,20 +363,23 @@ async function conectarGmail() {
 }
 
 async function modoPrueba() {
-  console.log(`🧪 MODO PRUEBA → se mandan las ${VERSIONES.length} versiones a ${EMAIL_PRUEBA}`);
+  console.log(`🧪 MODO PRUEBA → se mandan las ${VERSIONES.length} versiones + el seguimiento a ${EMAIL_PRUEBA}`);
   await conectarGmail();
   const ejemplo = { nombre: "INSTITUTO SANTA ROSA" };
-  for (let i = 0; i < VERSIONES.length; i++) {
-    const mail = armarMail(ejemplo, i);
+  const mails = VERSIONES.map((_, i) => armarMail(ejemplo, i));
+  mails.push(armarSeguimiento(ejemplo));
+  for (let i = 0; i < mails.length; i++) {
+    const mail = mails[i];
+    const etiqueta = mail.version === "seguimiento" ? "seguimiento" : `v${mail.version}`;
     await transporter.sendMail({
       from: `"Puntual" <${process.env.GMAIL_USER}>`,
       to: EMAIL_PRUEBA,
       replyTo: process.env.GMAIL_USER,
-      subject: `[PRUEBA v${mail.version}] ${mail.asunto}`,
+      subject: `[PRUEBA ${etiqueta}] ${mail.asunto}`,
       text: mail.cuerpo,
     });
-    console.log(`   ✅ Versión ${mail.version} enviada`);
-    if (i < VERSIONES.length - 1) await esperar(30 * 1000);
+    console.log(`   ✅ ${etiqueta} enviado`);
+    if (i < mails.length - 1) await esperar(30 * 1000);
   }
 }
 
@@ -350,8 +410,48 @@ async function main() {
     console.error(`   Detalle: ${error.message}`);
     process.exit(1);
   }
-  if (!escuelas || escuelas.length === 0) {
-    console.log("🎉 No quedan escuelas pendientes. ¡Lista completa!");
+  // Cupo de seguimientos que queda hoy (máximo MAX_SEGUIMIENTOS_POR_DIA por día)
+  const delDia = await contarEnviosDeHoy();
+  let segHoy = delDia.seguimientosHoy;
+  let nuevosHoy = delDia.nuevosHoy;
+  const segDisponibles = Math.max(0, MAX_SEGUIMIENTOS_POR_DIA - segHoy);
+  console.log(`📅 Hoy van ${nuevosHoy} nuevos y ${segHoy} seguimientos (cupo de seguimientos: ${MAX_SEGUIMIENTOS_POR_DIA}).`);
+
+  // Seguimientos vencidos: primer mail hace DIAS_SEGUIMIENTO días o más, sin seguimiento,
+  // sin no_seguir y sin errores. Van primero (los más viejos antes).
+  const limiteFecha = new Date(Date.now() - DIAS_SEGUIMIENTO * 24 * 60 * 60 * 1000).toISOString();
+  const { data: seguimientos, error: errSeg } = await supabase
+    .from(TABLA)
+    .select("id, nombre, email")
+    .eq("enviado", true)
+    .eq("seguimiento_enviado", false)
+    .eq("no_seguir", false)
+    .is("error", null)
+    .lte("fecha_envio", limiteFecha)
+    .order("fecha_envio", { ascending: true })
+    .limit(Math.max(1, Math.min(CANTIDAD, segDisponibles)));
+  if (errSeg) {
+    console.error("❌ Error leyendo los seguimientos pendientes en Supabase.");
+    console.error(`   Detalle: ${errSeg.message}`);
+    process.exit(1);
+  }
+
+  const colaSeg = segDisponibles > 0 ? (seguimientos || []).map((e) => ({ ...e, seguimiento: true })) : [];
+  const colaNuevos = (escuelas || []).map((e) => ({ ...e, seguimiento: false }));
+  console.log(`📋 Seguimientos vencidos disponibles en esta tanda: ${colaSeg.length}`);
+
+  // Elige la próxima escuela intercalando: seguimiento si queda cupo y no va adelante de los nuevos
+  // (orden del día: seguimiento, nuevo, seguimiento, nuevo, seguimiento). Si una cola se vacía, usa la otra
+  // (pero nunca pasa el cupo diario de seguimientos).
+  function siguiente() {
+    const hayCupoSeg = segHoy < MAX_SEGUIMIENTOS_POR_DIA && colaSeg.length > 0;
+    if (hayCupoSeg && (segHoy <= nuevosHoy || colaNuevos.length === 0)) return colaSeg.shift();
+    if (colaNuevos.length > 0) return colaNuevos.shift();
+    return hayCupoSeg ? colaSeg.shift() : null;
+  }
+
+  if (colaSeg.length === 0 && colaNuevos.length === 0) {
+    console.log("🎉 No quedan escuelas pendientes ni seguimientos. ¡Lista completa!");
     return;
   }
 
@@ -361,11 +461,13 @@ async function main() {
   let descartados = 0;
   let intentos = 0;
 
-  for (let i = 0; i < escuelas.length && intentos < CANTIDAD; i++) {
-    const escuela = escuelas[i];
+  while (intentos < CANTIDAD) {
+    const escuela = siguiente();
+    if (!escuela) break;
 
-    // Chequeo previo: si el dominio no existe, se marca y se pasa a la siguiente sin mandar
-    const chequeo = await validarEmail(escuela.email);
+    // Chequeo previo (solo primeros mails; en el seguimiento el dominio ya se validó):
+    // si el dominio no existe, se marca y se pasa a la siguiente sin mandar
+    const chequeo = escuela.seguimiento ? { ok: true } : await validarEmail(escuela.email);
     if (!chequeo.ok) {
       console.log(`\n⛔ ${escuela.nombre} → ${escuela.email}: ${chequeo.motivo}`);
       if (chequeo.definitivo) {
@@ -389,8 +491,9 @@ async function main() {
     }
     intentos++;
 
-    const mail = armarMail(escuela);
-    console.log(`\n[${intentos}/${CANTIDAD}] ${escuela.nombre} → ${escuela.email} (versión ${mail.version})`);
+    const mail = escuela.seguimiento ? armarSeguimiento(escuela) : armarMail(escuela);
+    const tipo = escuela.seguimiento ? "SEGUIMIENTO" : `versión ${mail.version}`;
+    console.log(`\n[${intentos}/${CANTIDAD}] ${escuela.nombre} → ${escuela.email} (${tipo})`);
 
     try {
       await transporter.sendMail({
@@ -401,12 +504,13 @@ async function main() {
         text: mail.cuerpo,
       });
       enviados++;
+      if (escuela.seguimiento) segHoy++; else nuevosHoy++;
       console.log("   ✅ Enviado");
 
-      const { error: errUpd } = await supabase
-        .from(TABLA)
-        .update({ enviado: true, fecha_envio: new Date().toISOString(), error: null })
-        .eq("id", escuela.id);
+      const marca = escuela.seguimiento
+        ? { seguimiento_enviado: true, fecha_seguimiento: new Date().toISOString() }
+        : { enviado: true, fecha_envio: new Date().toISOString(), error: null };
+      const { error: errUpd } = await supabase.from(TABLA).update(marca).eq("id", escuela.id);
       if (errUpd) console.warn(`   ⚠️ Enviado, pero no se pudo marcar en Supabase: ${errUpd.message}`);
     } catch (err) {
       if (err.code === "EAUTH") {
