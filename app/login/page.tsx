@@ -64,6 +64,27 @@ function LoginContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Primer ingreso: manda la bienvenida a la escuela y el aviso a Puntual (una sola vez).
+  // Espera como máximo 5 segundos para no demorar la entrada a la app si algo falla.
+  async function avisarPrimerIngreso(accessToken: string) {
+    try {
+      const control = new AbortController();
+      const corte = setTimeout(() => control.abort(), 5000);
+      const res = await fetch("/api/email/bienvenida", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: control.signal,
+      });
+      clearTimeout(corte);
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.marcar) {
+        await supabase.auth.updateUser({ data: { bienvenida_enviada: true } });
+      }
+    } catch (err) {
+      console.error("Error aviso primer ingreso:", err);
+    }
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -71,7 +92,7 @@ function LoginContent() {
     setSinConfirmar("");
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    const { data: loginData, error: authError } = await supabase.auth.signInWithPassword({
       email: loginEmail,
       password: loginPassword,
     });
@@ -85,6 +106,12 @@ function LoginContent() {
         setError("Email o contraseña incorrectos. Si no la recordás, usá \"¿Olvidaste tu contraseña?\".");
       }
       return;
+    }
+
+    // Primera vez que entra → bienvenida + aviso a Puntual
+    const sesion = loginData?.session;
+    if (sesion && !sesion.user.user_metadata?.bienvenida_enviada) {
+      await avisarPrimerIngreso(sesion.access_token);
     }
 
     // Si veníamos de /planes con un plan pendiente, volvemos ahí para
@@ -172,12 +199,8 @@ function LoginContent() {
       return;
     }
 
-    // Email de bienvenida en segundo plano (no bloquea el flujo)
-    fetch("/api/email/bienvenida", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre: regNombre, escuelaNombre: regEscuela, email: regEmail }),
-    }).catch(err => console.error("Error email bienvenida:", err));
+    // El mail de bienvenida ya no sale acá: sale en el primer inicio de sesión
+    // (ver avisarPrimerIngreso), cuando la escuela ya confirmó su email.
 
     setLoading(false);
 
