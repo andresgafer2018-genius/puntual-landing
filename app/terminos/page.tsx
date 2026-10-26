@@ -81,7 +81,7 @@ export default function TerminosPage() {
           <p>Puntual ofrece los siguientes planes:</p>
           <ul>
             <li>
-              <strong>Trial gratuito:</strong> acceso con límites (hasta 5 cursos y 15 profesores) sin cargo y sin necesidad de tarjeta de crédito, durante 15 días desde el registro.
+              <strong>Trial gratuito:</strong> acceso con límites (hasta 5 cursos y 30 profesores) sin cargo y sin necesidad de tarjeta de crédito, durante 15 días desde el registro.
             </li>
             <li>
               <strong>Plan Estándar:</strong> acceso completo con límites ampliados, con pago mensual o bimestral según la tarifa vigente.

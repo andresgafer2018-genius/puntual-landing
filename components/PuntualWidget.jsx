@@ -9,9 +9,9 @@ const RESPUESTAS = {
   "¿Qué es Puntual?":
     "Puntual es una app web argentina que genera horarios escolares automáticamente: sin conflictos de aulas, docentes ni materias, en minutos en vez de días. Sirve para primaria, secundaria y terciaria.",
   "Planes y precios":
-    "Tenemos 3 opciones: <strong>Prueba gratuita</strong> ($0, 15 días, hasta 5 cursos y 15 docentes), <strong>Plan Estándar</strong> (USD 99/mes, hasta 12 cursos y docentes ilimitados) y <strong>Plan Completo</strong> (USD 119/mes, cursos y docentes ilimitados).",
+    "Tenemos 3 opciones: <strong>Prueba gratuita</strong> ($0, 15 días, hasta 5 cursos y 30 docentes), <strong>Plan Estándar</strong> (USD 99/mes, hasta 12 cursos y docentes ilimitados) y <strong>Plan Completo</strong> (USD 119/mes, cursos y docentes ilimitados).",
   "Prueba gratuita":
-    "La prueba gratuita dura 15 días, no pide tarjeta de crédito, y te deja cargar hasta 5 cursos y 15 docentes para que conozcas la plataforma con tus propios datos.",
+    "La prueba gratuita dura 15 días, no pide tarjeta de crédito, y te deja cargar hasta 5 cursos y 30 docentes para que conozcas la plataforma con tus propios datos.",
   "¿Cómo empiezo?":
     'Es simple: entrá a <a href="https://www.puntualhorarios.com/login" target="_blank" rel="noopener noreferrer" style="color:#534AB7;font-weight:600;">puntualhorarios.com</a>, creá tu cuenta y arrancás la prueba gratuita al instante.',
 };

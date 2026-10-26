@@ -22,7 +22,7 @@ CARACTERÍSTICAS:
 
 PLANES:
 1. PRUEBA GRATUITA — $0 · 15 días · Sin tarjeta de crédito
-   Hasta 5 cursos y 15 docentes. Ideal para conocer la plataforma.
+   Hasta 5 cursos y 30 docentes. Ideal para conocer la plataforma.
 2. PLAN ESTÁNDAR — USD 99/mes
    Hasta 12 cursos, docentes ilimitados. Para instituciones medianas.
 3. PLAN COMPLETO — USD 119/mes

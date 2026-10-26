@@ -27,7 +27,7 @@ const PLANS = [
   {
     name: "Prueba gratuita", usd: null, period: "15 días · Solo una vez",
     desc: "Para conocer la plataforma antes de comprometerte.",
-    features: ["15 días de acceso completo", "Hasta 5 cursos", "Hasta 15 docentes", "Generación automática", "Exportación PDF y Excel"],
+    features: ["15 días de acceso completo", "Hasta 5 cursos", "Hasta 30 docentes", "Generación automática", "Exportación PDF y Excel"],
     cta: "Empezar gratis", highlight: false,
   },
   {

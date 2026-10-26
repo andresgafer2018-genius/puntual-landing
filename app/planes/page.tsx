@@ -203,7 +203,7 @@ function PlanesContent() {
               <p style={{ fontSize: 13, color: "#8892b0", lineHeight: 1.6 }}>Para conocer la plataforma antes de comprometerte.</p>
             </div>
             <ul style={{ listStyle: "none", marginBottom: 28, flex: 1 }}>
-              {["15 días de acceso completo","Hasta 5 cursos","Hasta 15 docentes","Generación automática","Exportación PDF y Excel"].map((f, i) => (
+              {["15 días de acceso completo","Hasta 5 cursos","Hasta 30 docentes","Generación automática","Exportación PDF y Excel"].map((f, i) => (
                 <li key={i} className="feat-item"><span style={{ color: "#4ff7a8", fontWeight: 700, flexShrink: 0 }}>✓</span>{f}</li>
               ))}
               <li className="feat-item" style={{ color: "#4a5578" }}><span style={{ flexShrink: 0 }}>✗</span>Sin soporte prioritario</li>
