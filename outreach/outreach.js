@@ -16,7 +16,7 @@
  *
  * Variables de entorno (GitHub Secrets / Variables):
  *   GMAIL_USER, GMAIL_APP_PASSWORD, SUPABASE_URL, SUPABASE_SERVICE_KEY  (secrets)
- *   MAX_EMAILS_POR_DIA  (variable) → tope diario total, por defecto 5
+ *   MAX_EMAILS_POR_DIA  (variable) → tope diario total, por defecto 5 (en GitHub está en 7)
  *   EMAIL_PRUEBA  (opcional) → modo prueba: manda las 4 versiones + el seguimiento a esta dirección, no toca la base
  *   CANTIDAD      (opcional) → corrida manual: cuántos mails mandar ahora (saltea los controles de horario)
  */
@@ -29,7 +29,7 @@ const dns = require("dns").promises;
 
 const TABLA = "escuelas_outreach";
 const LIMITE_MAXIMO = 20; // tope de seguridad por corrida manual
-const SEPARACION_MINIMA_MIN = 90; // no mandar si el último mail salió hace menos de esto
+const SEPARACION_MINIMA_MIN = 55; // no mandar si el último mail salió hace menos de esto (55 y no 60: las corridas son cada hora y pueden atrasarse unos segundos)
 const HORA_INICIO_AR = 8; // corridas programadas: no mandar antes de las 8 h de Argentina
 const HORA_FIN_AR = 19; // ni a partir de las 19 h de Argentina
 const ESPERA_MIN_MS = 2 * 60 * 1000; // en corridas manuales de varios mails: 2 a 4 min entre mails

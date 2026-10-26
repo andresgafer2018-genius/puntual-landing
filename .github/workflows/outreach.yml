@@ -5,7 +5,7 @@ on:
   # de 9 a 18 h de Argentina, vía la API de GitHub (workflow_dispatch).
   # Ya no usamos el schedule de GitHub porque atrasaba las corridas varias horas.
   # El script decide en cada corrida si manda o no:
-  #   - como máximo MAX_EMAILS_POR_DIA mails por día (5),
+  #   - como máximo MAX_EMAILS_POR_DIA mails por día (7),
   #   - al menos 90 min entre un mail y el siguiente,
   #   - nunca antes de las 8 ni después de las 19 h de Argentina.
   workflow_dispatch:
