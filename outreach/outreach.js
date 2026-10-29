@@ -483,9 +483,9 @@ async function main() {
     const escuela = siguiente();
     if (!escuela) break;
 
-    // Chequeo previo (solo primeros mails; en el seguimiento el dominio ya se validó):
-    // si el dominio no existe, se marca y se pasa a la siguiente sin mandar
-    const chequeo = escuela.seguimiento ? { ok: true } : await validarEmail(escuela.email);
+    // Chequeo previo (primeros mails y seguimientos: las escuelas de las tandas de antes
+    // del 14/10 nunca pasaron por este control). Si el dominio no existe, se marca y se pasa a la siguiente sin mandar
+    const chequeo = await validarEmail(escuela.email);
     if (!chequeo.ok) {
       console.log(`\n⛔ ${escuela.nombre} → ${escuela.email}: ${chequeo.motivo}`);
       if (chequeo.definitivo) {
