@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     const nombre: string = user.user_metadata?.nombre || ''
     const escuelaNombre: string = escuela?.nombre || user.user_metadata?.nombre_escuela || 'tu escuela'
     const email = user.email || ''
-    const zona = { timeZone: 'America/Argentina/Buenos_Aires' } as const
+    const zona = { timeZone: 'America/Argentina/Buenos_Aires', hourCycle: 'h23' } as const
     const registro = new Date(user.created_at).toLocaleString('es-AR', zona)
     const vence = escuela?.plan_vence ? new Date(escuela.plan_vence).toLocaleDateString('es-AR', zona) : '—'
 
