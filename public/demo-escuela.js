@@ -88,26 +88,26 @@
     });
     const cursos = [
       C('dc-1', '1', 'Aula 1', {
-        'dm-pdl': [5, 'dp-01'], 'dm-mat': [5, 'dp-03'], 'dm-ing': [3, 'dp-05'], 'dm-cs': [4, 'dp-06'],
-        'dm-cn': [4, 'dp-09'], 'dm-ef': [2, 'dp-11'], 'dm-art': [3, 'dp-12'], 'dm-cc': [2, 'dp-13'],
+        'dm-pdl': [5, 'dp-01'], 'dm-mat': [5, 'dp-03'], 'dm-ing': [3, 'dp-05'], 'dm-cs': [5, 'dp-06'],
+        'dm-cn': [4, 'dp-09'], 'dm-ef': [2, 'dp-11'], 'dm-art': [3, 'dp-12'], 'dm-cc': [3, 'dp-13'],
       }),
       C('dc-2', '2', 'Aula 2', {
-        'dm-pdl': [4, 'dp-02'], 'dm-mat': [4, 'dp-04'], 'dm-ing': [3, 'dp-05'], 'dm-his': [2, 'dp-07'],
+        'dm-pdl': [5, 'dp-02'], 'dm-mat': [5, 'dp-04'], 'dm-ing': [3, 'dp-05'], 'dm-his': [2, 'dp-07'],
         'dm-geo': [2, 'dp-08'], 'dm-bio': [3, 'dp-09'], 'dm-fq': [3, 'dp-10'], 'dm-ef': [2, 'dp-11'],
         'dm-art': [3, 'dp-12'], 'dm-cc': [2, 'dp-13'],
       }),
       C('dc-3', '3', 'Aula 3', {
-        'dm-pdl': [4, 'dp-01'], 'dm-mat': [4, 'dp-03'], 'dm-ing': [3, 'dp-05'], 'dm-his': [2, 'dp-06'],
+        'dm-pdl': [5, 'dp-01'], 'dm-mat': [5, 'dp-03'], 'dm-ing': [3, 'dp-05'], 'dm-his': [2, 'dp-06'],
         'dm-geo': [2, 'dp-08'], 'dm-bio': [3, 'dp-09'], 'dm-fq': [3, 'dp-10'], 'dm-ef': [2, 'dp-11'],
         'dm-art': [3, 'dp-12'], 'dm-cc': [2, 'dp-13'],
       }),
       C('dc-4', '4', 'Aula 4', {
-        'dm-lit': [4, 'dp-01'], 'dm-mat': [4, 'dp-03'], 'dm-ing': [3, 'dp-05'], 'dm-his': [3, 'dp-07'],
+        'dm-lit': [5, 'dp-01'], 'dm-mat': [5, 'dp-03'], 'dm-ing': [3, 'dp-05'], 'dm-his': [3, 'dp-07'],
         'dm-geo': [2, 'dp-08'], 'dm-bio': [2, 'dp-09'], 'dm-fq': [2, 'dp-10'], 'dm-ef': [2, 'dp-11'],
         'dm-ntic': [2, 'dp-14'], 'dm-sya': [2, 'dp-17'], 'dm-psi': [2, 'dp-16'],
       }),
       C('dc-5', '5', 'Aula 5', {
-        'dm-lit': [4, 'dp-02'], 'dm-mat': [4, 'dp-04'], 'dm-ing': [3, 'dp-05'], 'dm-his': [3, 'dp-07'],
+        'dm-lit': [5, 'dp-02'], 'dm-mat': [5, 'dp-04'], 'dm-ing': [3, 'dp-05'], 'dm-his': [3, 'dp-07'],
         'dm-geo': [2, 'dp-08'], 'dm-pyc': [2, 'dp-13'], 'dm-ef': [2, 'dp-11'], 'dm-ntic': [2, 'dp-14'],
         'dm-soc': [4, 'dp-15'], 'dm-psi': [2, 'dp-16'],
       }),
