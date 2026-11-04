@@ -291,3 +291,4 @@
   // Si el panel de inicio ya se dibujó antes de cargar este archivo, redibujarlo
   try { if (state.user) renderDashboard(); } catch (e) {}
 })();
+
