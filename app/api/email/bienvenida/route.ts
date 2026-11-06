@@ -82,11 +82,20 @@ export async function POST(req: NextRequest) {
             <p style="font-size: 15px; color: #4a5578; line-height: 1.6; margin: 0 0 24px;">
               Tu cuenta para <strong>${esc(escuelaNombre)}</strong> ya está activa y tenés
               <strong>15 días de prueba gratis</strong>${vence !== '—' ? ` (hasta el ${vence})` : ''}.
-              Ya podés empezar a armar los horarios de tu escuela.
             </p>
 
+            <div style="background: #ede9fe; border: 1px solid #c4b5fd; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px;">
+              <p style="font-size: 15px; font-weight: 700; color: #1e1b4b; margin: 0 0 8px;">🧪 Mirá cómo funciona en 1 minuto, sin cargar nada</p>
+              <p style="font-size: 14px; color: #3730a3; line-height: 1.6; margin: 0;">
+                Al entrar a la app, en el Inicio, tocá <strong>Probar con escuela de ejemplo</strong>
+                y después <strong>⚡ Generar horario</strong>. En segundos ves un horario completo,
+                por curso y por profesor, armado con una escuela de 17 profesores y 5 cursos.
+                Tus datos no se tocan.
+              </p>
+            </div>
+
             <div style="background: #f0f4ff; border-radius: 10px; padding: 20px 24px; margin-bottom: 28px;">
-              <p style="font-size: 14px; font-weight: 700; color: #1a1f35; margin: 0 0 12px;">¿Por dónde empezar?</p>
+              <p style="font-size: 14px; font-weight: 700; color: #1a1f35; margin: 0 0 12px;">Después, para armar el de tu escuela:</p>
               <ol style="font-size: 14px; color: #4a5578; margin: 0; padding-left: 18px; line-height: 2;">
                 <li>Configurá los módulos horarios de tu escuela</li>
                 <li>Cargá tus docentes y materias</li>
@@ -104,6 +113,7 @@ export async function POST(req: NextRequest) {
 
             <p style="font-size: 14px; color: #4a5578; line-height: 1.6; margin: 0 0 8px;">
               ¿Alguna duda para cargar los datos? Respondé este mail y te ayudo.
+              Y si preferís, mandame los profesores y horarios en un Excel (o como los tengas) y te los cargo yo.
             </p>
 
             <hr style="border: none; border-top: 1px solid #e8eaf2; margin: 24px 0;" />
