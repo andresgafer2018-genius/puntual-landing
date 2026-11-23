@@ -19,11 +19,16 @@
  *   MAX_EMAILS_POR_DIA  (variable) → tope diario total, por defecto 5 (en GitHub está en 7)
  *   EMAIL_PRUEBA  (opcional) → modo prueba: manda las 4 versiones + el seguimiento a esta dirección, no toca la base
  *   CANTIDAD      (opcional) → corrida manual: cuántos mails mandar ahora (saltea los controles de horario)
+ *
+ * REBOTES: al empezar cada corrida (aunque después no se mande nada) revisa en Gmail los avisos de
+ * "Mail Delivery Subsystem" de los últimos días (rebotes.js). Las escuelas cuyo mail no se pudo
+ * entregar quedan con error "rebote: ..." y no_seguir = true, y no se les vuelve a mandar.
  */
 
 const { createClient } = require("@supabase/supabase-js");
 const nodemailer = require("nodemailer");
 const dns = require("dns").promises;
+const { revisarRebotes } = require("./rebotes");
 
 // ─── CONFIGURACIÓN ───────────────────────────────────────────────────────────
 
@@ -343,6 +348,23 @@ async function dnsFunciona() {
   }
 }
 
+// ─── REBOTES ─────────────────────────────────────────────────────────────────
+
+// Si falla (Gmail no responde, IMAP apagado, etc.) solo avisa: el envío sigue igual
+async function chequearRebotes() {
+  try {
+    const { avisos, marcadas } = await revisarRebotes(supabase);
+    if (!marcadas.length) {
+      console.log(`📭 Rebotes: ${avisos} avisos de los últimos días, ninguna escuela nueva para marcar.`);
+      return;
+    }
+    console.log(`📬 Rebotes: ${marcadas.length} escuela(s) marcadas para no mandarles más:`);
+    for (const e of marcadas) console.log(`   🚫 [${e.id}] ${e.nombre} → ${e.email} (${e.motivo})`);
+  } catch (err) {
+    console.warn(`⚠️ No se pudieron revisar los rebotes (sigo con el envío): ${err.message}`);
+  }
+}
+
 // ─── ENVÍO ───────────────────────────────────────────────────────────────────
 
 function esRechazoDelDestinatario(err) {
@@ -405,6 +427,8 @@ async function main() {
   if (MODO_PRUEBA) return modoPrueba();
 
   console.log(ES_MANUAL ? `📨 Corrida manual → hasta ${CANTIDAD} mails` : "📨 Corrida programada → 1 mail");
+
+  await chequearRebotes();
 
   if (!ES_MANUAL && !(await puedeEnviarAhora())) return;
 
